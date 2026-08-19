@@ -1,0 +1,20 @@
+# Environment & API keys
+.env
+*.env
+GEMINI_API_KEY.txt
+*.key
+
+# Local SQLite Database
+leads.db
+
+# Python cache & virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# OS specific
+Thumbs.db
+.DS_Store
