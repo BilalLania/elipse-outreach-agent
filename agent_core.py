@@ -132,48 +132,73 @@ def extract_json_safe(text: str):
     return None
 
 
-def execute_find_employee_contact(domain: str) -> dict:
-    """Calls Hunter.io's Domain Search API to find real employee contacts if configured."""
+def execute_find_employee_contact(domain: str, contact_name: str = "") -> dict:
+    """Finds verified employee email via Hunter.io Domain Search & Email Finder."""
     hunter_key = get_hunter_key()
     if not hunter_key:
-        return {"name": "", "position": "", "email": "unknown", "source": "none"}
+        return {"name": contact_name, "position": "", "email": "unknown", "source": "none"}
 
     clean_dom = extract_domain(domain) or domain.strip().replace("https://", "").replace("http://", "").split("/")[0]
 
+    # 1. Try Specific Name Finder if contact_name is known
+    if contact_name and contact_name.lower() not in ["team", "unknown", "n/a", ""]:
+        try:
+            resp = requests.get(
+                "https://api.hunter.io/v2/email-finder",
+                params={"domain": clean_dom, "full_name": contact_name, "api_key": hunter_key},
+                timeout=6,
+            )
+            if resp.status_code == 200:
+                edata = resp.json().get("data", {})
+                if edata.get("email"):
+                    return {
+                        "name": contact_name,
+                        "position": edata.get("position") or "",
+                        "email": edata["email"],
+                        "source": "hunter_finder",
+                    }
+        except Exception:
+            pass
+
+    # 2. Try Domain Search for Top Personal Executive Contact
     try:
         resp = requests.get(
             "https://api.hunter.io/v2/domain-search",
             params={"domain": clean_dom, "api_key": hunter_key, "limit": 10},
             timeout=8,
         )
-        resp.raise_for_status()
-        data = resp.json().get("data", {})
+        if resp.status_code == 200:
+            data = resp.json().get("data", {})
+            personal_emails = [e for e in data.get("emails", []) if e.get("type") == "personal"]
+            if personal_emails:
+                priority_keywords = ["sales", "marketing", "founder", "owner", "ceo", "director", "head", "president"]
+                def score(e):
+                    pos = (e.get("position") or "").lower()
+                    return (15 if any(k in pos for k in priority_keywords) else 0) + (e.get("confidence") or 0)
+                personal_emails.sort(key=score, reverse=True)
+                top = personal_emails[0]
+                first = top.get("first_name") or ""
+                last = top.get("last_name") or ""
+                fullname = f"{first} {last}".strip()
+                return {
+                    "name": fullname or contact_name,
+                    "position": top.get("position") or "",
+                    "email": top.get("value") or "unknown",
+                    "source": "hunter_domain",
+                }
+            # Fallback to domain email
+            generic = [e for e in data.get("emails", []) if e.get("value")]
+            if generic:
+                return {
+                    "name": contact_name,
+                    "position": "Company Contact",
+                    "email": generic[0].get("value"),
+                    "source": "hunter_generic",
+                }
     except Exception:
-        return {"name": "", "position": "", "email": "unknown", "source": "error"}
+        pass
 
-    emails = [e for e in data.get("emails", []) if e.get("type") == "personal"]
-    if not emails:
-        generic = [e for e in data.get("emails", []) if e.get("value")]
-        if generic:
-            return {"name": "", "position": "General Inbox", "email": generic[0].get("value"), "source": "hunter_generic"}
-        return {"name": "", "position": "", "email": "unknown", "source": "hunter_none"}
-
-    priority_keywords = ["sales", "marketing", "founder", "owner", "ceo", "director", "business development", "head"]
-
-    def score(e):
-        position = (e.get("position") or "").lower()
-        role_bonus = 15 if any(k in position for k in priority_keywords) else 0
-        return role_bonus + (e.get("confidence") or 0)
-
-    emails.sort(key=score, reverse=True)
-    best = emails[0]
-    first = best.get("first_name") or ""
-    last = best.get("last_name") or ""
-    name = f"{first} {last}".strip()
-    position = best.get("position") or ""
-    email = best.get("value") or "unknown"
-
-    return {"name": name, "position": position, "email": email, "source": "hunter"}
+    return {"name": contact_name, "position": "", "email": "unknown", "source": "none"}
 
 
 def run_agent(user_prompt: str, log=None) -> dict:
@@ -232,15 +257,20 @@ Identify 3 to 5 real commercial businesses/brands matching this request that do 
             skipped_duplicates.append(company_name)
             continue
 
-        # Optional Hunter.io enrichment if contact_email is generic or unknown
-        if contact_email in ["unknown", "info@", "sales@"] and domain:
-            hunter_info = execute_find_employee_contact(domain)
+        # Run Hunter.io enrichment to get verified executive email
+        if domain:
+            hunter_info = execute_find_employee_contact(domain, contact_name=contact_name)
             if hunter_info.get("email") and hunter_info.get("email") != "unknown":
                 contact_email = hunter_info["email"]
-                if hunter_info.get("name"):
-                    contact_name = hunter_info["name"]
-                if hunter_info.get("position"):
-                    contact_role = hunter_info["position"]
+            if hunter_info.get("name") and hunter_info.get("name") not in ["Team", "unknown", ""]:
+                contact_name = hunter_info["name"]
+            if hunter_info.get("position") and hunter_info.get("position") != "Company Contact":
+                contact_role = hunter_info["position"]
+
+        # If email is still unknown, provide fallback domain contact email
+        if not contact_email or contact_email == "unknown":
+            if domain:
+                contact_email = f"info@{domain}"
 
         body = raw_body.replace("{{CALENDAR_LINK}}", cal_link)
 
