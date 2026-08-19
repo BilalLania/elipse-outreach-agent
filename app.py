@@ -437,7 +437,7 @@ def render_hunter_decision_makers_ui(lead, key_prefix="today"):
 
     if f"dms_{lead_id}" in st.session_state:
         contacts = st.session_state[f"dms_{lead_id}"]
-        st.markdown(f"<div style='background-color:{SURFACE_COLOR}; padding:10px 14px; border-radius:8px; border:1px solid {BORDER_COLOR}; margin-top:8px; margin-bottom:8px;'>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background-color:{CARD_BG}; padding:12px 14px; border-radius:8px; border:1px solid {CARD_BORDER}; margin-top:8px; margin-bottom:8px;'>", unsafe_allow_html=True)
         st.markdown("**👥 Top Decision Makers Found on Hunter.io:**")
 
         for idx, dm in enumerate(contacts):
