@@ -15,7 +15,15 @@ import re
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import requests
-from ddgs import DDGS
+
+try:
+    from ddgs import DDGS
+except ImportError:
+    try:
+        from duckduckgo_search import DDGS
+    except ImportError:
+        DDGS = None
+
 from google import genai
 from google.genai import types
 
@@ -25,37 +33,41 @@ load_dotenv()
 
 MODEL = "gemini-3.6-flash"
 DEFAULT_CALENDAR_LINK = "https://calendly.com/bilal-lania-elipsestudio/15-mins-meeting"
-CALENDAR_LINK = os.environ.get("CALENDAR_LINK", DEFAULT_CALENDAR_LINK)
-HUNTER_API_KEY = os.environ.get("HUNTER_API_KEY")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-SYSTEM_PROMPT = """You are an elite outreach research assistant for Elipse Studio,
-a 3D visualization and immersive experience studio (CGI animation, VR/AR,
-architectural visualization, motion graphics, and real-time WEB CONFIGURATORS).
 
-Your goal: Identify companies that sell physical or configurable products (furniture,
-luxury interiors, automotive, yachts, architectural fixtures, industrial equipment, etc.)
-that would benefit significantly from an interactive 3D web configurator on their website.
-
-For each company:
-1. Verify why they are a great fit and note what physical products they sell.
-2. Note why an interactive 3D configurator would increase their sales conversion.
-3. Write the email like a real person firing off a quick, thoughtful note:
-   - 60-90 words total. Short sentences. No marketing fluff.
-   - Sound like Bilal personally noticed their site/products and is reaching out himself (first person).
-   - Mention ONE specific observation about their product line.
-   - Avoid buzzwords: 'cutting-edge', 'seamless', 'elevate', 'unlock', 'leverage', 'streamline', etc.
-   - State what Elipse Studio does in one plain sentence.
-   - End with a low-pressure ask including {{CALENDAR_LINK}}.
-   - Sign off simply as 'Bilal' or 'Bilal, Elipse Studio'.
-"""
+def get_calendar_link():
+    link = os.environ.get("CALENDAR_LINK")
+    if not link:
+        try:
+            import streamlit as st
+            link = st.secrets.get("CALENDAR_LINK")
+        except Exception:
+            pass
+    return link or DEFAULT_CALENDAR_LINK
 
 
 def get_gemini_client():
-    api_key = os.environ.get("GEMINI_API_KEY") or GEMINI_API_KEY
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise ValueError("GEMINI_API_KEY is not set. Please add it to your .env file.")
+        try:
+            import streamlit as st
+            api_key = st.secrets.get("GEMINI_API_KEY")
+        except Exception:
+            pass
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is not set. Please add it to your .env file or Streamlit Cloud Secrets.")
     return genai.Client(api_key=api_key)
+
+
+def get_hunter_key():
+    key = os.environ.get("HUNTER_API_KEY")
+    if not key:
+        try:
+            import streamlit as st
+            key = st.secrets.get("HUNTER_API_KEY")
+        except Exception:
+            pass
+    return key
 
 
 def search_web(query: str, max_results: int = 8, log=print):
@@ -80,7 +92,7 @@ def extract_domain(url: str) -> str:
 
 def execute_find_employee_contact(domain: str, log=print) -> dict:
     """Calls Hunter.io's Domain Search API to find real employee contacts."""
-    hunter_key = os.environ.get("HUNTER_API_KEY") or HUNTER_API_KEY
+    hunter_key = get_hunter_key()
     if not hunter_key:
         return {"name": "", "position": "", "email": "unknown", "source": "none"}
 
@@ -289,7 +301,8 @@ Return raw JSON without markdown formatting."""
             draft_data = json.loads(raw_draft)
             subject = draft_data.get("subject", f"Question regarding {company_name}")
             raw_body = draft_data.get("body", "")
-            body = raw_body.replace("{{CALENDAR_LINK}}", CALENDAR_LINK)
+            cal_link = get_calendar_link()
+            body = raw_body.replace("{{CALENDAR_LINK}}", cal_link)
 
             db.add_lead(
                 company_name=company_name,

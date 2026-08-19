@@ -15,6 +15,15 @@ import agent_core
 
 load_dotenv()
 
+# Automatically bridge Streamlit Cloud secrets to environment variables if present
+try:
+    if hasattr(st, "secrets"):
+        for key, val in st.secrets.items():
+            if isinstance(val, str) and not os.environ.get(key):
+                os.environ[key] = val
+except Exception:
+    pass
+
 st.set_page_config(
     page_title="Elipse Outreach Agent",
     page_icon="🎯",
