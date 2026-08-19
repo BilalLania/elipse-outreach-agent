@@ -98,6 +98,124 @@ def init_db():
             WHERE pipeline_stage IS NULL OR pipeline_stage = ''
         """)
 
+    seed_or_update_core_leads()
+
+
+VERIFIED_SAMPLE_LEADS = [
+    {
+        "company_name": "Garrett's Custom Golf Carts",
+        "company_website": "https://www.gowithgarretts.com/",
+        "contact_name": "Hal Garrett",
+        "contact_role": "President & Owner",
+        "contact_email": "halg@gowithgarretts.com",
+        "industry_tag": "Custom Golf Carts",
+        "deal_value": 18500.0,
+        "reason": "Buyers customize body paint, upholstery stitching, lift kits, and rim styles using static gallery photos, leading to drop-offs before requesting a quote.",
+        "subject": "3D cart builder for Garrett's Custom Golf Carts",
+        "body": "Hi Hal,\n\nI was looking at your custom golf cart builds at Garrett's, specifically your custom diamond-stitched seating and lift kit options. Your builds look great.\n\nRight now, buyers browse static photos to imagine custom paint and upholstery combinations. We build real-time 3D web configurators that let customers customize paint, seats, and rims in 3D directly on your site before buying.\n\nWould you be open to a quick demo tailored for your custom builds? You can pick a time here: https://calendly.com/bilal-lania-elipsestudio/15-mins-meeting\n\nBest,\nBilal\nElipse Studio",
+    },
+    {
+        "company_name": "Tidewater Carts",
+        "company_website": "https://tidewatercarts.com/",
+        "contact_name": "Custom Sales Team",
+        "contact_role": "Head of Custom Sales",
+        "contact_email": "sales@tidewatercarts.com",
+        "industry_tag": "Custom Golf Carts",
+        "deal_value": 21000.0,
+        "reason": "Offers extensive custom colors, tops, and high-performance lift packages, but currently relies on static inventory listings.",
+        "subject": "Interactive 3D configurator for Tidewater Carts",
+        "body": "Hi Team,\n\nI came across Tidewater Carts while researching top custom golf cart builders in the US. Your custom lifted builds and sound bar packages stand out.\n\nSince buyers often want to compare custom body colors and seat patterns before ordering, an interactive 3D configurator on your website would allow them to visualize their build live and submit quote-ready specifications.\n\nWould you be open to seeing a 5-minute visual demo? Feel free to pick a time here: https://calendly.com/bilal-lania-elipsestudio/15-mins-meeting\n\nBest,\nBilal\nElipse Studio",
+    },
+    {
+        "company_name": "Performance Golf Carts",
+        "company_website": "https://www.performancegolfcarts.com/",
+        "contact_name": "Custom Build Team",
+        "contact_role": "Head of Sales",
+        "contact_email": "sales@performancegolfcarts.com",
+        "industry_tag": "Custom Golf Carts",
+        "deal_value": 19500.0,
+        "reason": "High-volume custom builder with extensive parts & accessories inventory that would see higher conversions with live 3D visual customization.",
+        "subject": "3D visualizer for Performance Golf Carts",
+        "body": "Hi Team,\n\nI was browsing your custom EZ-GO and Club Car inventory at Performance Golf Carts. Your Double Take body kits and custom wheels look sharp.\n\nRight now, buyers browse 2D images to pick options. We create interactive 3D configurators that let customers swap body colors, seats, and lift kits in real time on your website.\n\nAre you open to exploring a quick 3D demo tailored for your builds? You can grab a time here: https://calendly.com/bilal-lania-elipsestudio/15-mins-meeting\n\nBest,\nBilal\nElipse Studio",
+    },
+    {
+        "company_name": "Apex Golf Carts",
+        "company_website": "https://www.apexgolfcarts.com/",
+        "contact_name": "Sales & Design Team",
+        "contact_role": "Director of Sales",
+        "contact_email": "sales@apexgolfcarts.com",
+        "industry_tag": "Custom Golf Carts",
+        "deal_value": 17500.0,
+        "reason": "Specializes in luxury street-legal electric carts with premium custom finishes that require high-end 3D visualization.",
+        "subject": "3D customization for Apex Golf Carts",
+        "body": "Hi Team,\n\nI was checking out your luxury street-legal electric cart models at Apex. The modern styling and premium interior finishes look exceptional.\n\nSince high-end buyers expect interactive digital experiences, a real-time 3D configurator on your site would let clients customize their cart exterior, wheels, and seating in full 3D before inquiring.\n\nWould you be open to a brief preview of how this looks in action? Pick a convenient time here: https://calendly.com/bilal-lania-elipsestudio/15-mins-meeting\n\nBest,\nBilal\nElipse Studio",
+    },
+    {
+        "company_name": "Streetrod Golf Cars",
+        "company_website": "https://streetrodgolfcars.com/",
+        "contact_name": "Custom Build Division",
+        "contact_role": "Head of Custom Engineering & Sales",
+        "contact_email": "info@streetrodgolfcars.com",
+        "industry_tag": "Bespoke Vehicles",
+        "deal_value": 18000.0,
+        "reason": "Handcrafted vintage hot rod replica golf carts with bespoke paint and chrome options, ideal for high-ticket 3D interactive customization.",
+        "subject": "Real-time 3D configurator for Streetrod Golf Cars",
+        "body": "Hi Team,\n\nI was admiring your handcrafted hot rod golf cars at Streetrod. The vintage fiberglass bodywork and custom chrome details are works of art.\n\nFor bespoke vehicles at this price point, an interactive 3D web configurator allows collectors to test paint colors, flame graphics, and wheel packages in photorealistic 3D directly on your site.\n\nWould you be open to seeing a quick concept tailored for Streetrod? You can choose a time here: https://calendly.com/bilal-lania-elipsestudio/15-mins-meeting\n\nBest,\nBilal\nElipse Studio",
+    },
+]
+
+
+def seed_or_update_core_leads():
+    """Seeds or updates verified leads with official websites, real decision makers, and drafts."""
+    with get_conn() as conn:
+        for lead in VERIFIED_SAMPLE_LEADS:
+            cname = lead["company_name"]
+            existing = conn.execute("SELECT id FROM leads WHERE LOWER(company_name) = LOWER(?)", (cname,)).fetchone()
+            now = datetime.now().isoformat(timespec="seconds")
+            if existing:
+                conn.execute(
+                    """UPDATE leads SET
+                       company_website = ?, contact_name = ?, contact_role = ?,
+                       contact_email = ?, industry_tag = ?, deal_value = ?,
+                       reason = ?, subject = ?, body = ?, updated_at = ?
+                       WHERE id = ?""",
+                    (
+                        lead["company_website"],
+                        lead["contact_name"],
+                        lead["contact_role"],
+                        lead["contact_email"],
+                        lead["industry_tag"],
+                        lead["deal_value"],
+                        lead["reason"],
+                        lead["subject"],
+                        lead["body"],
+                        now,
+                        existing["id"],
+                    ),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO leads
+                       (company_name, company_website, contact_name, contact_role, contact_email,
+                        industry_tag, deal_value, pipeline_stage, status, reason, subject, body,
+                        source_prompt, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft_ready', 'new', ?, ?, ?, 'Golf Cart Customization USA', ?, ?)""",
+                    (
+                        lead["company_name"],
+                        lead["company_website"],
+                        lead["contact_name"],
+                        lead["contact_role"],
+                        lead["contact_email"],
+                        lead["industry_tag"],
+                        lead["deal_value"],
+                        lead["reason"],
+                        lead["subject"],
+                        lead["body"],
+                        now,
+                        now,
+                    ),
+                )
+
 
 def add_lead(
     company_name,

@@ -13,6 +13,14 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 import requests
 
+try:
+    from ddgs import DDGS
+except ImportError:
+    try:
+        from duckduckgo_search import DDGS
+    except ImportError:
+        DDGS = None
+
 from google import genai
 from google.genai import types
 
