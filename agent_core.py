@@ -97,6 +97,34 @@ def get_hunter_key():
     return key
 
 
+def verify_and_resolve_official_website(company_name: str, suggested_url: str) -> str:
+    """Verifies that a URL is active. If invalid or hallucinated, searches for the exact official website."""
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+    # 1. Quick check on suggested URL
+    if suggested_url and ("http://" in suggested_url or "https://" in suggested_url):
+        try:
+            r = requests.head(suggested_url, timeout=3, headers=headers, allow_redirects=True)
+            if r.status_code < 400:
+                return r.url
+        except Exception:
+            pass
+
+    # 2. Fast resolution for the real official website
+    if DDGS and company_name:
+        try:
+            clean_name = re.sub(r'[\"\']+', ' ', company_name).strip()
+            results = list(DDGS().text(f"{clean_name} official website", max_results=4))
+            for res in results:
+                href = res.get("href")
+                if href and not any(x in href.lower() for x in ["linkedin.com", "facebook.com", "instagram.com", "yelp.com", "yellowpages.com", "mapquest.com", "wikipedia.org", "bloomberg.com"]):
+                    return href
+        except Exception:
+            pass
+
+    return suggested_url or f"https://www.{extract_domain(company_name)}.com"
+
+
 def extract_domain(url: str) -> str:
     try:
         netloc = urlparse(url).netloc
@@ -285,8 +313,9 @@ Identify 3 to 5 real commercial businesses/brands matching this request that do 
             continue
 
         company_name = c.get("company_name", "").strip()
-        website = c.get("company_website", "").strip()
-        domain = c.get("domain") or extract_domain(website)
+        raw_website = c.get("company_website", "").strip()
+        website = verify_and_resolve_official_website(company_name, raw_website)
+        domain = extract_domain(website) or c.get("domain") or extract_domain(raw_website)
         reason = c.get("reason_no_configurator", "")
         contact_name = c.get("contact_name", "Team")
         contact_role = c.get("contact_role", "")

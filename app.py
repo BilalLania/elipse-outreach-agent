@@ -423,22 +423,29 @@ st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
 
 def render_hunter_decision_makers_ui(lead, key_prefix="today"):
-    """Renders interactive Hunter.io 3-decision-maker finder and selector."""
+    """Renders interactive Hunter.io 3-decision-maker finder and selector with auto website resolution."""
     lead_id = lead["id"]
-    lead_domain = lead.get("company_website") or lead.get("company_name")
+    comp_name = lead.get("company_name", "")
+    raw_website = lead.get("company_website") or comp_name
 
     if st.button("🎯 Find Decision Makers (Hunter.io)", key=f"btn_hdm_{key_prefix}_{lead_id}"):
-        with st.spinner(f"Querying Hunter.io for top executives at {lead['company_name']}..."):
-            contacts = agent_core.get_top_decision_makers(lead_domain, limit=3)
+        with st.spinner(f"Verifying website & querying Hunter.io for {comp_name}..."):
+            resolved_url = agent_core.verify_and_resolve_official_website(comp_name, raw_website)
+            if resolved_url != raw_website:
+                db.update_lead(lead_id, company_website=resolved_url)
+            contacts = agent_core.get_top_decision_makers(resolved_url, limit=3)
             if contacts:
-                st.session_state[f"dms_{lead_id}"] = contacts
+                st.session_state[f"dms_{lead_id}"] = {"contacts": contacts, "url": resolved_url}
             else:
-                st.warning(f"No verified decision-maker emails found on Hunter.io for {lead_domain}.")
+                st.warning(f"No verified decision-maker emails found on Hunter.io for {resolved_url}.")
 
     if f"dms_{lead_id}" in st.session_state:
-        contacts = st.session_state[f"dms_{lead_id}"]
+        dm_state = st.session_state[f"dms_{lead_id}"]
+        contacts = dm_state["contacts"]
+        resolved_url = dm_state.get("url", raw_website)
+
         st.markdown(f"<div style='background-color:{CARD_BG}; padding:12px 14px; border-radius:8px; border:1px solid {CARD_BORDER}; margin-top:8px; margin-bottom:8px;'>", unsafe_allow_html=True)
-        st.markdown("**👥 Top Decision Makers Found on Hunter.io:**")
+        st.markdown(f"**👥 Decision Makers Found for [{resolved_url}]({resolved_url}):**")
 
         for idx, dm in enumerate(contacts):
             dm_c1, dm_c2 = st.columns([3, 1.3])
@@ -453,6 +460,7 @@ def render_hunter_decision_makers_ui(lead, key_prefix="today"):
                 if st.button("👉 Select Contact", key=f"apply_dm_{key_prefix}_{lead_id}_{idx}"):
                     db.update_lead(
                         lead_id,
+                        company_website=resolved_url,
                         contact_name=dm["name"],
                         contact_role=dm["position"],
                         contact_email=dm["email"],
