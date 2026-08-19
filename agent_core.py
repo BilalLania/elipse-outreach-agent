@@ -201,6 +201,53 @@ def execute_find_employee_contact(domain: str, contact_name: str = "") -> dict:
     return {"name": contact_name, "position": "", "email": "unknown", "source": "none"}
 
 
+def get_top_decision_makers(domain: str, limit: int = 3) -> list:
+    """Queries Hunter.io Domain Search and returns up to 3 top decision-maker contacts with positions, confidence, and emails."""
+    hunter_key = get_hunter_key()
+    if not hunter_key:
+        return []
+
+    clean_dom = extract_domain(domain) or domain.strip().replace("https://", "").replace("http://", "").split("/")[0]
+
+    try:
+        resp = requests.get(
+            "https://api.hunter.io/v2/domain-search",
+            params={"domain": clean_dom, "api_key": hunter_key, "limit": 10},
+            timeout=8,
+        )
+        if resp.status_code == 200:
+            data = resp.json().get("data", {})
+            emails = data.get("emails", [])
+            
+            # Prioritize executive roles
+            priority_keywords = ["founder", "owner", "ceo", "director", "sales", "marketing", "head", "president", "partner", "vp", "chief", "manager"]
+            
+            def score(e):
+                pos = (e.get("position") or "").lower()
+                role_bonus = 25 if any(k in pos for k in priority_keywords) else 0
+                is_personal = 15 if e.get("type") == "personal" else 0
+                return role_bonus + is_personal + (e.get("confidence") or 0)
+
+            emails.sort(key=score, reverse=True)
+            results = []
+            for e in emails[:limit]:
+                first = e.get("first_name") or ""
+                last = e.get("last_name") or ""
+                name = f"{first} {last}".strip() or "Executive Contact"
+                results.append({
+                    "name": name,
+                    "position": e.get("position") or "Company Executive",
+                    "email": e.get("value") or "",
+                    "confidence": e.get("confidence") or 0,
+                    "type": e.get("type", "personal"),
+                })
+            return results
+    except Exception:
+        pass
+
+    return []
+
+
 def run_agent(user_prompt: str, log=None) -> dict:
     """
     Executes single-pass AI discovery and drafting with Gemini 3.6 Flash.

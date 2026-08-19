@@ -422,6 +422,47 @@ with top_col3:
 st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
 
+def render_hunter_decision_makers_ui(lead, key_prefix="today"):
+    """Renders interactive Hunter.io 3-decision-maker finder and selector."""
+    lead_id = lead["id"]
+    lead_domain = lead.get("company_website") or lead.get("company_name")
+
+    if st.button("🎯 Find Decision Makers (Hunter.io)", key=f"btn_hdm_{key_prefix}_{lead_id}"):
+        with st.spinner(f"Querying Hunter.io for top executives at {lead['company_name']}..."):
+            contacts = agent_core.get_top_decision_makers(lead_domain, limit=3)
+            if contacts:
+                st.session_state[f"dms_{lead_id}"] = contacts
+            else:
+                st.warning(f"No verified decision-maker emails found on Hunter.io for {lead_domain}.")
+
+    if f"dms_{lead_id}" in st.session_state:
+        contacts = st.session_state[f"dms_{lead_id}"]
+        st.markdown(f"<div style='background-color:{SURFACE_COLOR}; padding:10px 14px; border-radius:8px; border:1px solid {BORDER_COLOR}; margin-top:8px; margin-bottom:8px;'>", unsafe_allow_html=True)
+        st.markdown("**👥 Top Decision Makers Found on Hunter.io:**")
+
+        for idx, dm in enumerate(contacts):
+            dm_c1, dm_c2 = st.columns([3, 1.3])
+            with dm_c1:
+                conf_badge = f"<span style='background:#10b98120; color:#10b981; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:600;'>{dm['confidence']}% verified</span>" if dm.get('confidence', 0) > 50 else ""
+                st.markdown(
+                    f"**👤 {dm['name']}** — *{dm['position']}* {conf_badge}<br>"
+                    f"<code>{dm['email']}</code>",
+                    unsafe_allow_html=True
+                )
+            with dm_c2:
+                if st.button("👉 Select Contact", key=f"apply_dm_{key_prefix}_{lead_id}_{idx}"):
+                    db.update_lead(
+                        lead_id,
+                        contact_name=dm["name"],
+                        contact_role=dm["position"],
+                        contact_email=dm["email"],
+                    )
+                    st.success(f"Assigned {dm['name']} ({dm['email']}) as primary contact!")
+                    del st.session_state[f"dms_{lead_id}"]
+                    st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
 # ---------------------------------------------------------------------------
 # VIEW 1: TODAY (Dashboard Executive Overview matching screenshot)
 # ---------------------------------------------------------------------------
@@ -597,6 +638,7 @@ if st.session_state["active_tab"] == "Today":
                 with c1:
                     st.markdown(f"**Decision Maker:** `{lead.get('contact_name') or 'N/A'}` ({lead.get('contact_role') or 'Role unknown'})")
                     st.markdown(f"**Email:** `{lead.get('contact_email') or 'unknown'}` · **Website:** [{lead.get('company_website')}]({lead.get('company_website')})")
+                    render_hunter_decision_makers_ui(lead, key_prefix="today")
                     st.markdown(f"**Fit Observation:** {lead.get('reason')}")
                     st.markdown(f"**Subject:** {lead.get('subject')}")
                     st.text_area("Draft Body", lead.get("body", ""), height=130, key=f"today_body_{lead['id']}")
@@ -647,6 +689,7 @@ elif st.session_state["active_tab"] == "Pipeline":
                     st.markdown(f"**Website:** [{lead.get('company_website')}]({lead.get('company_website')})")
                     st.markdown(f"**Contact:** {lead.get('contact_name') or 'N/A'} ({lead.get('contact_role') or 'Unknown'})")
                     st.markdown(f"**Email:** `{lead.get('contact_email') or 'unknown'}`")
+                    render_hunter_decision_makers_ui(lead, key_prefix="pipe")
                     st.markdown(f"**Tag:** `{lead.get('industry_tag', '3D Configurator')}`")
                     st.markdown(f"**Angle:** {lead.get('reason')}")
 
@@ -716,6 +759,7 @@ elif st.session_state["active_tab"] == "Contacts":
                 st.markdown(f"**Contact:** {lead.get('contact_name') or 'N/A'}")
                 st.markdown(f"**Role:** {lead.get('contact_role') or 'Unknown'}")
                 st.markdown(f"**Email:** `{lead['contact_email']}`")
+                render_hunter_decision_makers_ui(lead, key_prefix="contacts")
                 st.markdown(f"**Phone:** `{lead.get('contact_phone') or 'None'}`")
                 st.markdown(f"**Industry:** `{lead.get('industry_tag')}`")
                 st.markdown(f"**Deal Value:** `${lead.get('deal_value', 15000):,.0f}`")
