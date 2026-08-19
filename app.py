@@ -476,18 +476,30 @@ if st.session_state["active_tab"] == "Today":
             with st.spinner("AI is researching and drafting personalized opportunities for Elipse Studio..."):
                 result = agent_core.run_agent(today_prompt.strip(), log=lambda m: None)
 
-            st.session_state["last_search_msg"] = f"🎉 Successfully generated and added {result['saved']} new qualified lead(s) to your CRM!"
-            if result.get("skipped_duplicates"):
-                st.session_state["last_search_skip"] = f"Skipped {len(result['skipped_duplicates'])} already in your database."
+            if result.get("error"):
+                st.session_state["last_search_error"] = result["error"]
+            elif result["saved"] > 0:
+                st.session_state["last_search_msg"] = f"🎉 Successfully generated and added {result['saved']} new qualified lead(s) to your CRM!"
+                if result.get("skipped_duplicates"):
+                    st.session_state["last_search_skip"] = f"Skipped {len(result['skipped_duplicates'])} already in your database."
+            else:
+                if result.get("skipped_duplicates"):
+                    st.session_state["last_search_skip"] = f"Found {len(result['skipped_duplicates'])} matching companies, but all were already in your CRM database."
+                else:
+                    st.session_state["last_search_error"] = "No new companies found for this prompt. Please try a different query."
             st.rerun()
+
+        if "last_search_error" in st.session_state:
+            st.error(f"⚠️ Notice: {st.session_state['last_search_error']}")
+            del st.session_state["last_search_error"]
 
         if "last_search_msg" in st.session_state:
             st.success(st.session_state["last_search_msg"])
-            if "last_search_skip" in st.session_state:
-                st.info(st.session_state["last_search_skip"])
             del st.session_state["last_search_msg"]
-            if "last_search_skip" in st.session_state:
-                del st.session_state["last_search_skip"]
+
+        if "last_search_skip" in st.session_state:
+            st.info(st.session_state["last_search_skip"])
+            del st.session_state["last_search_skip"]
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 

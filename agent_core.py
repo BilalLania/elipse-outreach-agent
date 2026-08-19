@@ -1,12 +1,9 @@
 """
-agent_core.py — Research + drafting agent loop powered by Google Gemini.
+agent_core.py — High-performance single-pass research + drafting engine powered by Google Gemini.
 
-1. Generates targeted search queries based on user criteria.
-2. Performs live web searches to find matching companies.
-3. Uses Hunter.io (if configured) or web search to find decision-maker contacts.
-4. Uses Google Gemini to analyze companies, verify lack of 3D configurators,
-   and draft personalized high-converting outreach emails.
-5. Saves qualified leads to SQLite (db.py), skipping duplicates.
+Performs commercial intelligence analysis, identifies companies lacking 3D web configurators,
+enriches contacts via Hunter.io (when available), and drafts hyper-personalized cold emails
+in a single efficient pass.
 """
 
 import os
@@ -15,14 +12,6 @@ import re
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import requests
-
-try:
-    from ddgs import DDGS
-except ImportError:
-    try:
-        from duckduckgo_search import DDGS
-    except ImportError:
-        DDGS = None
 
 from google import genai
 from google.genai import types
@@ -34,25 +23,42 @@ load_dotenv()
 MODEL = "gemini-3.6-flash"
 DEFAULT_CALENDAR_LINK = "https://calendly.com/bilal-lania-elipsestudio/15-mins-meeting"
 
-SYSTEM_PROMPT = """You are an elite outreach research assistant for Elipse Studio,
-a 3D visualization and immersive experience studio (CGI animation, VR/AR,
-architectural visualization, motion graphics, and real-time WEB CONFIGURATORS).
+SYSTEM_PROMPT = """You are the specialized outreach research & pipeline engine for Elipse Studio,
+a 3D visualization and immersive experience studio (CGI animation, VR/AR, architectural
+visualization, motion graphics, and real-time interactive 3D WEB CONFIGURATORS).
 
-Your goal: Identify companies that sell physical or configurable products (furniture,
-luxury interiors, automotive, custom golf carts, yachts, architectural fixtures, industrial equipment, etc.)
-that would benefit significantly from an interactive 3D web configurator on their website.
+Your task: Given a target business criteria from Bilal, identify 3 to 5 real commercial
+companies/brands that sell physical or customizable products (e.g. bespoke furniture, custom golf carts,
+luxury interiors, automotive, yachts, industrial machinery, architectural fixtures, etc.) that do NOT
+currently have an interactive 3D Web Configurator on their website.
 
 For each company:
-1. Verify why they are a great fit and note what physical products they sell.
-2. Note why an interactive 3D configurator would increase their sales conversion.
-3. Write the email like a real person firing off a quick, thoughtful note:
-   - 60-90 words total. Short sentences. No marketing fluff.
-   - Sound like Bilal personally noticed their site/products and is reaching out himself (first person).
-   - Mention ONE specific observation about their product line.
-   - Avoid buzzwords: 'cutting-edge', 'seamless', 'elevate', 'unlock', 'leverage', 'streamline', etc.
-   - State what Elipse Studio does in one plain sentence.
-   - End with a low-pressure ask including {{CALENDAR_LINK}}.
-   - Sign off simply as 'Bilal' or 'Bilal, Elipse Studio'.
+1. Identify the company name, website, decision maker name/role, and contact email.
+2. Note why their physical product line would convert significantly higher with an interactive 3D Web Configurator.
+3. Draft a high-converting cold email from Bilal (Elipse Studio):
+   - 60 to 90 words total. Short sentences. No marketing copy/buzzwords.
+   - Sound like Bilal personally noticed something about their product collection (first person: "I noticed...", "We build...").
+   - Mention ONE specific observation about their custom product line.
+   - Plain statement of what Elipse Studio does (interactive 3D web configurators).
+   - Low-pressure ask with the exact placeholder {{CALENDAR_LINK}} once.
+   - Sign off simply as "Bilal" or "Bilal, Elipse Studio".
+
+Return a valid JSON array of objects:
+[
+  {
+    "company_name": "Company Name",
+    "company_website": "https://company.com",
+    "domain": "company.com",
+    "contact_name": "Decision Maker Name or 'Team'",
+    "contact_role": "Owner, Founder, Head of Sales, or Marketing Director",
+    "contact_email": "contact email or domain email if known, or 'unknown'",
+    "industry_tag": "Industry Niche Tag",
+    "deal_value": 18000,
+    "reason_no_configurator": "Specific observation on why a 3D configurator will increase their product conversions",
+    "subject": "Punchy personalized subject line",
+    "body": "Complete email body containing {{CALENDAR_LINK}} once"
+  }
+]
 """
 
 
@@ -91,28 +97,6 @@ def get_hunter_key():
     return key
 
 
-def clean_search_query(query: str) -> str:
-    """Cleans up query to prevent DuckDuckGo rate limiting or syntax issues."""
-    # Remove surrounding or nested quotes
-    cleaned = re.sub(r'[\"\']+', ' ', query)
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-    return cleaned
-
-
-def search_web(query: str, max_results: int = 6, log=print):
-    """Executes live web search using DDGS with sanitized query."""
-    clean_q = clean_search_query(query)
-    _safe_log(f"🌐 Searching the web: '{clean_q}'...", log)
-    if DDGS is None:
-        return []
-    try:
-        results = list(DDGS().text(clean_q, max_results=max_results))
-        return results or []
-    except Exception as e:
-        _safe_log(f"⚠️ Search warning: {e}", log)
-        return []
-
-
 def extract_domain(url: str) -> str:
     try:
         netloc = urlparse(url).netloc
@@ -122,8 +106,34 @@ def extract_domain(url: str) -> str:
         return ""
 
 
-def execute_find_employee_contact(domain: str, log=print) -> dict:
-    """Calls Hunter.io's Domain Search API to find real employee contacts."""
+def extract_json_safe(text: str):
+    if not text:
+        return None
+    cleaned = text.strip()
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        pass
+
+    m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
+    if m:
+        try:
+            return json.loads(m.group(1).strip())
+        except Exception:
+            pass
+
+    arr_m = re.search(r"\[\s*\{[\s\S]*\}\s*\]", cleaned)
+    if arr_m:
+        try:
+            return json.loads(arr_m.group(0).strip())
+        except Exception:
+            pass
+
+    return None
+
+
+def execute_find_employee_contact(domain: str) -> dict:
+    """Calls Hunter.io's Domain Search API to find real employee contacts if configured."""
     hunter_key = get_hunter_key()
     if not hunter_key:
         return {"name": "", "position": "", "email": "unknown", "source": "none"}
@@ -134,12 +144,11 @@ def execute_find_employee_contact(domain: str, log=print) -> dict:
         resp = requests.get(
             "https://api.hunter.io/v2/domain-search",
             params={"domain": clean_dom, "api_key": hunter_key, "limit": 10},
-            timeout=10,
+            timeout=8,
         )
         resp.raise_for_status()
         data = resp.json().get("data", {})
-    except Exception as e:
-        _safe_log(f"⚠️ Hunter.io lookup error for {clean_dom}: {e}", log)
+    except Exception:
         return {"name": "", "position": "", "email": "unknown", "source": "error"}
 
     emails = [e for e in data.get("emails", []) if e.get("type") == "personal"]
@@ -164,233 +173,110 @@ def execute_find_employee_contact(domain: str, log=print) -> dict:
     position = best.get("position") or ""
     email = best.get("value") or "unknown"
 
-    if name:
-        _safe_log(f"🎯 Hunter.io found: {name} ({position}) <{email}>", log)
     return {"name": name, "position": position, "email": email, "source": "hunter"}
 
 
-def _safe_log(msg: str, log=print):
-    try:
-        log(msg)
-    except UnicodeEncodeError:
-        try:
-            log(msg.encode("ascii", errors="replace").decode("ascii"))
-        except Exception:
-            pass
-
-
-def run_agent(user_prompt: str, log=print) -> dict:
+def run_agent(user_prompt: str, log=None) -> dict:
     """
-    Runs the multi-stage research and drafting pipeline with Gemini 3.6 Flash.
+    Executes single-pass AI discovery and drafting with Gemini 3.6 Flash.
     """
     client = get_gemini_client()
     saved_count = 0
     skipped_duplicates = []
     new_leads_list = []
+    cal_link = get_calendar_link()
 
-    def app_log(msg):
-        _safe_log(msg, log)
+    prompt_content = f"""Target Goal from Bilal:
+"{user_prompt}"
 
-    app_log("🤖 Step 1/4: Analyzing your target criteria with Gemini...")
+Identify 3 to 5 real commercial businesses/brands matching this request that do not have interactive 3D web configurators on their site. Provide complete company profiles and write a personalized email draft for each."""
 
-    # Stage 1: Generate clean search queries
-    query_gen_prompt = f"""The user wants to find commercial outreach targets for Elipse Studio (3D Web Configurator & Visualization).
-User Request: "{user_prompt}"
-
-Generate 2 simple, unquoted web search queries to find real company websites matching this request.
-Return ONLY a valid JSON array of strings, e.g. ["query 1", "query 2"]. Do not use quotes inside the queries. Do not add markdown or code fences."""
-
-    queries = []
     try:
-        q_resp = client.models.generate_content(
+        response = client.models.generate_content(
             model=MODEL,
-            contents=query_gen_prompt,
-            config=types.GenerateContentConfig(temperature=0.2),
+            contents=prompt_content,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                temperature=0.3,
+            ),
         )
-        cleaned_text = q_resp.text.strip().replace("```json", "").replace("```", "").strip()
-        queries = json.loads(cleaned_text)
-    except Exception:
-        queries = [clean_search_query(user_prompt), f"{clean_search_query(user_prompt)} manufacturers retailers official site"]
+        candidates = extract_json_safe(response.text) or []
+    except Exception as e:
+        return {"saved": 0, "skipped_duplicates": [], "leads": [], "error": str(e)}
 
-    # Stage 2: Live searches
-    search_snippets = []
-    seen_urls = set()
-    for q in queries[:2]:
-        results = search_web(q, max_results=6, log=app_log)
-        for r in results:
-            url = r.get("href", "")
-            if url and url not in seen_urls and not any(d in url for d in ["wikipedia.org", "yellowpages", "tripadvisor", "linkedin.com/pulse"]):
-                seen_urls.add(url)
-                search_snippets.append({
-                    "title": r.get("title", ""),
-                    "url": url,
-                    "snippet": r.get("body", "")
-                })
-
-    app_log(f"🔎 Step 2/4: Identified {len(search_snippets)} prospective candidates from web research.")
-
-    # Stage 3: Extract structured candidate companies using Gemini
-    app_log("🧠 Step 3/4: Qualifying companies & verifying 3D configurator opportunities...")
-
-    candidates = []
-
-    if search_snippets:
-        qualification_prompt = f"""Search Results:
-{json.dumps(search_snippets, indent=2)}
-
-Target Goal: "{user_prompt}"
-
-From the search results, select 3 to 5 real commercial companies that sell physical or configurable products and would benefit from an interactive 3D Web Configurator.
-
-Return ONLY a JSON array of objects with the following keys:
-- "company_name": Name of the company
-- "company_website": Official website URL
-- "domain": Root domain (e.g. example.com)
-- "reason_no_configurator": Why this company is a great fit (what they sell, observation that they only have 2D images or static catalog, and how 3D configurator helps).
-- "product_observation": One specific product line or feature observed from their description.
-
-Return ONLY the raw JSON array (no markdown code fences)."""
-
-        try:
-            qual_resp = client.models.generate_content(
-                model=MODEL,
-                contents=qualification_prompt,
-                config=types.GenerateContentConfig(temperature=0.2),
-            )
-            raw_candidates = qual_resp.text.strip().replace("```json", "").replace("```", "").strip()
-            candidates = json.loads(raw_candidates)
-        except Exception as e:
-            app_log(f"⚠️ Search parser notice: {e}")
-            candidates = []
-
-    # Reliable fallback: If live search returned 0 snippets or parsing failed, use Gemini's deep business intelligence
-    if not candidates:
-        app_log("💡 Leveraging Gemini Commercial Intelligence to discover real matching companies...")
-        direct_discovery_prompt = f"""User Request: "{user_prompt}"
-
-Identify 3 to 5 real, existing commercial businesses/brands matching this request that sell physical or configurable products and would benefit from an interactive 3D Web Configurator from Elipse Studio.
-
-Return ONLY a valid JSON array of objects with:
-- "company_name": Exact real name of the company
-- "company_website": Real official website URL (e.g. https://brand.com)
-- "domain": Domain name (e.g. brand.com)
-- "reason_no_configurator": Why an interactive 3D configurator will increase their product sales conversions compared to static photos
-- "product_observation": One specific real product line or custom feature
-
-Return ONLY raw JSON array without markdown code fences."""
-
-        try:
-            direct_resp = client.models.generate_content(
-                model=MODEL,
-                contents=direct_discovery_prompt,
-                config=types.GenerateContentConfig(temperature=0.3),
-            )
-            raw_direct = direct_resp.text.strip().replace("```json", "").replace("```", "").strip()
-            candidates = json.loads(raw_direct)
-        except Exception as e:
-            app_log(f"⚠️ Discovery notice: {e}")
-            candidates = []
-
-    if not candidates:
-        app_log("⚠️ Could not extract companies. Please try a slightly different prompt.")
-        return {"saved": 0, "skipped_duplicates": []}
-
-    # Stage 4: Contact lookup + Personalized Draft generation
-    app_log(f"✍️ Step 4/4: Drafting personalized emails for {len(candidates)} companies...")
+    if not candidates or not isinstance(candidates, list):
+        return {"saved": 0, "skipped_duplicates": [], "leads": []}
 
     for c in candidates:
+        if not isinstance(c, dict):
+            continue
+
         company_name = c.get("company_name", "").strip()
         website = c.get("company_website", "").strip()
         domain = c.get("domain") or extract_domain(website)
         reason = c.get("reason_no_configurator", "")
-        product_obs = c.get("product_obs") or c.get("product_observation", "")
+        contact_name = c.get("contact_name", "Team")
+        contact_role = c.get("contact_role", "")
+        contact_email = c.get("contact_email", "unknown")
+        industry_tag = c.get("industry_tag", "3D Configurator / CGI")
+        deal_val = float(c.get("deal_value") or 18000.0)
+        subject = c.get("subject", f"3D Configurator for {company_name}")
+        raw_body = c.get("body", "")
 
         if not company_name:
             continue
 
+        # Check duplicates
         if db.is_duplicate(company_name):
             skipped_duplicates.append(company_name)
-            app_log(f"⏭️ Skipped '{company_name}' (already in database)")
             continue
 
-        # Look up contact
-        contact_info = execute_find_employee_contact(domain, log=app_log)
-        contact_name = contact_info.get("name", "")
-        contact_email = contact_info.get("email", "unknown")
-        contact_role = contact_info.get("position", "")
+        # Optional Hunter.io enrichment if contact_email is generic or unknown
+        if contact_email in ["unknown", "info@", "sales@"] and domain:
+            hunter_info = execute_find_employee_contact(domain)
+            if hunter_info.get("email") and hunter_info.get("email") != "unknown":
+                contact_email = hunter_info["email"]
+                if hunter_info.get("name"):
+                    contact_name = hunter_info["name"]
+                if hunter_info.get("position"):
+                    contact_role = hunter_info["position"]
 
-        # Generate personalized email with Gemini
-        draft_prompt = f"""{SYSTEM_PROMPT}
+        body = raw_body.replace("{{CALENDAR_LINK}}", cal_link)
 
-Target Company:
-- Name: {company_name}
-- Website: {website}
-- Product Observation: {product_obs}
-- Fit Reason: {reason}
-- Contact Person: {contact_name if contact_name else 'Unknown (use gentle direct greeting)'} ({contact_role})
+        new_id = db.add_lead(
+            company_name=company_name,
+            company_website=website,
+            contact_name=contact_name,
+            contact_role=contact_role,
+            contact_email=contact_email,
+            industry_tag=industry_tag,
+            deal_value=deal_val,
+            pipeline_stage="draft_ready",
+            reason=reason,
+            subject=subject,
+            body=body,
+            source_prompt=user_prompt,
+        )
 
-Write a high-converting, personalized cold email from Bilal (Elipse Studio).
-Requirements:
-1. 60 to 90 words.
-2. Short sentences.
-3. Natural mention of {{CALENDAR_LINK}} placeholder once.
-4. Subject line must be punchy and personalized (e.g. "Quick question re: [specific product line] on [Company Name]" or "3D visualizer for [Company Name]").
+        saved_count += 1
+        new_leads_list.append({
+            "id": new_id,
+            "company_name": company_name,
+            "company_website": website,
+            "contact_name": contact_name,
+            "contact_role": contact_role,
+            "contact_email": contact_email,
+            "industry_tag": industry_tag,
+            "deal_value": deal_val,
+            "pipeline_stage": "draft_ready",
+            "reason": reason,
+            "subject": subject,
+            "body": body,
+        })
 
-Return ONLY a JSON object with:
-{{
-  "subject": "The email subject line",
-  "body": "The complete email body containing {{CALENDAR_LINK}} once"
-}}
-Return raw JSON without markdown formatting."""
-
-        try:
-            draft_resp = client.models.generate_content(
-                model=MODEL,
-                contents=draft_prompt,
-                config=types.GenerateContentConfig(temperature=0.4),
-            )
-            raw_draft = draft_resp.text.strip().replace("```json", "").replace("```", "").strip()
-            draft_data = json.loads(raw_draft)
-            subject = draft_data.get("subject", f"Question regarding {company_name}")
-            raw_body = draft_data.get("body", "")
-            cal_link = get_calendar_link()
-            body = raw_body.replace("{{CALENDAR_LINK}}", cal_link)
-
-            new_id = db.add_lead(
-                company_name=company_name,
-                company_website=website,
-                contact_name=contact_name,
-                contact_role=contact_role,
-                contact_email=contact_email,
-                industry_tag=c.get("industry", "3D Configurator / CGI"),
-                deal_value=18000.0,
-                pipeline_stage="draft_ready",
-                reason=reason,
-                subject=subject,
-                body=body,
-                source_prompt=user_prompt,
-            )
-
-            created_lead_record = {
-                "id": new_id,
-                "company_name": company_name,
-                "company_website": website,
-                "contact_name": contact_name,
-                "contact_role": contact_role,
-                "contact_email": contact_email,
-                "industry_tag": c.get("industry", "3D Configurator / CGI"),
-                "deal_value": 18000.0,
-                "pipeline_stage": "draft_ready",
-                "reason": reason,
-                "subject": subject,
-                "body": body,
-            }
-            new_leads_list.append(created_lead_record)
-            saved_count += 1
-            app_log(f"✅ Qualified & drafted: {company_name}")
-
-        except Exception as e:
-            app_log(f"⚠️ Error drafting email for {company_name}: {e}")
-
-    app_log(f"🎉 Complete! Saved {saved_count} new leads to your CRM.")
-    return {"saved": saved_count, "skipped_duplicates": skipped_duplicates, "leads": new_leads_list}
+    return {
+        "saved": saved_count,
+        "skipped_duplicates": skipped_duplicates,
+        "leads": new_leads_list,
+    }
