@@ -490,7 +490,17 @@ if st.session_state["active_tab"] == "Today":
             st.rerun()
 
         if "last_search_error" in st.session_state:
-            st.error(f"⚠️ Notice: {st.session_state['last_search_error']}")
+            err = str(st.session_state["last_search_error"])
+            if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
+                st.warning(
+                    "⚠️ **Google Gemini API Daily Quota Limit (Free Sandbox Tier):**\n\n"
+                    "Your API key reached Google AI Studio's free cap of 20 requests/day for this project.\n\n"
+                    "**How to unlock unlimited searches:**\n"
+                    "1. Go to [aistudio.google.com](https://aistudio.google.com/) and click **'Set up billing'** on your project (Gemini Flash is virtually free — pennies for thousands of searches), OR\n"
+                    "2. Click **'Create API key in new project'** in Google AI Studio and paste the new key into your Streamlit Secrets."
+                )
+            else:
+                st.error(f"⚠️ {err}")
             del st.session_state["last_search_error"]
 
         if "last_search_msg" in st.session_state:
@@ -789,8 +799,22 @@ elif st.session_state["active_tab"] == "AI Lead Finder":
 
     if "finder_search_msg" in st.session_state:
         st.success(st.session_state["finder_search_msg"])
-        if "finder_search_skip" in st.session_state:
-            st.info(st.session_state["finder_search_skip"])
         del st.session_state["finder_search_msg"]
-        if "finder_search_skip" in st.session_state:
-            del st.session_state["finder_search_skip"]
+
+    if "finder_search_skip" in st.session_state:
+        st.info(st.session_state["finder_search_skip"])
+        del st.session_state["finder_search_skip"]
+
+    if "finder_search_error" in st.session_state:
+        err = str(st.session_state["finder_search_error"])
+        if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
+            st.warning(
+                "⚠️ **Google Gemini API Daily Quota Limit (Free Sandbox Tier):**\n\n"
+                "Your API key reached Google AI Studio's free cap of 20 requests/day for this project.\n\n"
+                "**How to unlock unlimited searches:**\n"
+                "1. Go to [aistudio.google.com](https://aistudio.google.com/) and click **'Set up billing'** on your project, OR\n"
+                "2. Click **'Create API key in new project'** in Google AI Studio and paste the new key into your Streamlit Secrets."
+            )
+        else:
+            st.error(f"⚠️ {err}")
+        del st.session_state["finder_search_error"]
