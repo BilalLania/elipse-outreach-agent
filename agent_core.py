@@ -307,7 +307,12 @@ Return raw JSON without markdown formatting."""
             db.add_lead(
                 company_name=company_name,
                 company_website=website,
+                contact_name=contact_name,
+                contact_role=contact_role,
                 contact_email=contact_email,
+                industry_tag=c.get("industry", "3D Configurator / CGI"),
+                deal_value=18000.0,
+                pipeline_stage="draft_ready",
                 reason=reason,
                 subject=subject,
                 body=body,
