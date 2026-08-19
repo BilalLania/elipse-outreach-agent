@@ -26,7 +26,7 @@ except Exception:
     pass
 
 st.set_page_config(
-    page_title="ellipse / studio — CRM",
+    page_title="elipse / studio — CRM",
     page_icon="⬭",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -295,7 +295,7 @@ with st.sidebar:
         f"""
         <div class="logo-container">
             <span class="logo-oval"></span>
-            <span class="logo-text">ellipse</span>
+            <span class="logo-text">elipse</span>
             <span class="logo-sub">/ studio</span>
         </div>
         """,
@@ -432,7 +432,7 @@ if st.session_state["active_tab"] == "Today":
     st.markdown(f'<div class="date-eyebrow">{today_formatted}</div>', unsafe_allow_html=True)
     st.markdown(
         f"""
-        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 1.25rem;">
             <div>
                 <div class="hero-heading">Good morning, Bilal.</div>
                 <div class="subtitle">Here's the shape of the studio today.</div>
@@ -441,6 +441,54 @@ if st.session_state["active_tab"] == "Today":
         """,
         unsafe_allow_html=True,
     )
+
+    # -----------------------------------------------------------------------
+    # PROMINENT AI LEAD DISCOVERY & RESEARCH BAR
+    # -----------------------------------------------------------------------
+    with st.container():
+        st.markdown(
+            f"""
+            <div class="crm-card" style="padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; border-left: 4px solid {ACCENT_COLOR};">
+                <div class="date-eyebrow" style="margin-bottom: 0.25rem;">AI LEAD DISCOVERY & RESEARCH ENGINE</div>
+                <div style="font-family:'Playfair Display', serif; font-size:1.35rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom: 0.2rem;">
+                    Find & Qualify Prospective Clients
+                </div>
+                <div style="font-size: 0.85rem; color:{TEXT_MUTED}; margin-bottom: 0.75rem;">
+                    Enter what you are looking for. Gemini 3.6 Flash will search live web catalogs, verify lack of 3D configurators, lookup decision-maker emails with Hunter.io, and draft personalized outreach emails directly into your CRM.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        with st.form("today_ai_finder_form"):
+            prompt_c1, prompt_c2 = st.columns([4.2, 1.3])
+            with prompt_c1:
+                today_prompt = st.text_input(
+                    "Search Criteria",
+                    placeholder="e.g. Find 5 luxury bespoke furniture or kitchen cabinet manufacturers in UAE without a web configurator",
+                    label_visibility="collapsed",
+                )
+            with prompt_c2:
+                today_submitted = st.form_submit_button("🚀 Research & Draft", type="primary", use_container_width=True)
+
+        if today_submitted and today_prompt.strip():
+            log_area = st.empty()
+            log_lines = []
+
+            def log(msg):
+                log_lines.append(msg)
+                log_area.markdown("\n\n".join([f"`{line}`" for line in log_lines]))
+
+            with st.spinner("AI Agent is searching live web, qualifying candidates, and drafting emails..."):
+                result = agent_core.run_agent(today_prompt.strip(), log=log)
+
+            st.success(f"🎉 Success! Generated and saved {result['saved']} new qualified lead(s) into your CRM.")
+            if result["skipped_duplicates"]:
+                st.info(f"Skipped existing leads: {', '.join(result['skipped_duplicates'])}")
+            st.rerun()
+
+    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
     # 4-Column Stat Matrix Card
     pipeline_val_fmt = f"${metrics.get('pipeline_value', 0):,.0f}"
