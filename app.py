@@ -473,20 +473,21 @@ if st.session_state["active_tab"] == "Today":
                 today_submitted = st.form_submit_button("🚀 Research & Draft", type="primary", use_container_width=True)
 
         if today_submitted and today_prompt.strip():
-            log_area = st.empty()
-            log_lines = []
+            with st.spinner("AI is researching and drafting personalized opportunities for Elipse Studio..."):
+                result = agent_core.run_agent(today_prompt.strip(), log=lambda m: None)
 
-            def log(msg):
-                log_lines.append(msg)
-                log_area.markdown("\n\n".join([f"`{line}`" for line in log_lines]))
-
-            with st.spinner("AI Agent is searching live web, qualifying candidates, and drafting emails..."):
-                result = agent_core.run_agent(today_prompt.strip(), log=log)
-
-            st.success(f"🎉 Success! Generated and saved {result['saved']} new qualified lead(s) into your CRM.")
-            if result["skipped_duplicates"]:
-                st.info(f"Skipped existing leads: {', '.join(result['skipped_duplicates'])}")
+            st.session_state["last_search_msg"] = f"🎉 Successfully generated and added {result['saved']} new qualified lead(s) to your CRM!"
+            if result.get("skipped_duplicates"):
+                st.session_state["last_search_skip"] = f"Skipped {len(result['skipped_duplicates'])} already in your database."
             st.rerun()
+
+        if "last_search_msg" in st.session_state:
+            st.success(st.session_state["last_search_msg"])
+            if "last_search_skip" in st.session_state:
+                st.info(st.session_state["last_search_skip"])
+            del st.session_state["last_search_msg"]
+            if "last_search_skip" in st.session_state:
+                del st.session_state["last_search_skip"]
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
@@ -766,17 +767,18 @@ elif st.session_state["active_tab"] == "AI Lead Finder":
         submitted = st.form_submit_button("🚀 Discover & Draft Leads", type="primary")
 
     if submitted and prompt.strip():
-        log_area = st.empty()
-        log_lines = []
+        with st.spinner("AI is researching and drafting personalized opportunities for Elipse Studio..."):
+            result = agent_core.run_agent(prompt.strip(), log=lambda m: None)
 
-        def log(msg):
-            log_lines.append(msg)
-            log_area.markdown("\n\n".join([f"`{line}`" for line in log_lines]))
-
-        with st.spinner("AI Agent is searching live web, identifying companies, and writing drafts..."):
-            result = agent_core.run_agent(prompt.strip(), log=log)
-
-        st.success(f"🎉 Generated {result['saved']} new qualified lead(s) into your CRM!")
-        if result["skipped_duplicates"]:
-            st.info(f"Skipped existing leads: {', '.join(result['skipped_duplicates'])}")
+        st.session_state["finder_search_msg"] = f"🎉 Successfully generated and added {result['saved']} new qualified lead(s) into your CRM!"
+        if result.get("skipped_duplicates"):
+            st.session_state["finder_search_skip"] = f"Skipped {len(result['skipped_duplicates'])} already in your database."
         st.rerun()
+
+    if "finder_search_msg" in st.session_state:
+        st.success(st.session_state["finder_search_msg"])
+        if "finder_search_skip" in st.session_state:
+            st.info(st.session_state["finder_search_skip"])
+        del st.session_state["finder_search_msg"]
+        if "finder_search_skip" in st.session_state:
+            del st.session_state["finder_search_skip"]

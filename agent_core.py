@@ -186,6 +186,7 @@ def run_agent(user_prompt: str, log=print) -> dict:
     client = get_gemini_client()
     saved_count = 0
     skipped_duplicates = []
+    new_leads_list = []
 
     def app_log(msg):
         _safe_log(msg, log)
@@ -355,7 +356,7 @@ Return raw JSON without markdown formatting."""
             cal_link = get_calendar_link()
             body = raw_body.replace("{{CALENDAR_LINK}}", cal_link)
 
-            db.add_lead(
+            new_id = db.add_lead(
                 company_name=company_name,
                 company_website=website,
                 contact_name=contact_name,
@@ -369,11 +370,27 @@ Return raw JSON without markdown formatting."""
                 body=body,
                 source_prompt=user_prompt,
             )
+
+            created_lead_record = {
+                "id": new_id,
+                "company_name": company_name,
+                "company_website": website,
+                "contact_name": contact_name,
+                "contact_role": contact_role,
+                "contact_email": contact_email,
+                "industry_tag": c.get("industry", "3D Configurator / CGI"),
+                "deal_value": 18000.0,
+                "pipeline_stage": "draft_ready",
+                "reason": reason,
+                "subject": subject,
+                "body": body,
+            }
+            new_leads_list.append(created_lead_record)
             saved_count += 1
-            app_log(f"✅ Saved lead: {company_name} ({contact_email})")
+            app_log(f"✅ Qualified & drafted: {company_name}")
 
         except Exception as e:
             app_log(f"⚠️ Error drafting email for {company_name}: {e}")
 
-    app_log(f"🎉 Complete! Saved {saved_count} new leads to your dashboard.")
-    return {"saved": saved_count, "skipped_duplicates": skipped_duplicates}
+    app_log(f"🎉 Complete! Saved {saved_count} new leads to your CRM.")
+    return {"saved": saved_count, "skipped_duplicates": skipped_duplicates, "leads": new_leads_list}
