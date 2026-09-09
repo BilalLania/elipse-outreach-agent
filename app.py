@@ -495,6 +495,19 @@ with top_col3:
 st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
 
+def get_linkedin_profile_url(contact_name: str, company_name: str, existing_url: str = "") -> str:
+    """
+    Returns direct LinkedIn URL if present; otherwise creates a 1-click LinkedIn people search link
+    designed for the free Apollo Chrome Extension to pop up and reveal mobile phone numbers.
+    """
+    if existing_url and "linkedin.com" in existing_url:
+        return existing_url
+    query = f"{contact_name or ''} {company_name or ''}".strip()
+    if not query:
+        query = company_name or "company"
+    return f"https://www.linkedin.com/search/results/people/?keywords={urllib.parse.quote(query)}"
+
+
 def render_hunter_decision_makers_ui(lead, key_prefix="today"):
     """Renders interactive Hunter.io 3-decision-maker finder and selector with auto website resolution."""
     lead_id = lead["id"]
@@ -524,20 +537,23 @@ def render_hunter_decision_makers_ui(lead, key_prefix="today"):
             dm_c1, dm_c2 = st.columns([3, 1.3])
             with dm_c1:
                 conf_badge = f"<span style='background:#10b98120; color:#10b981; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:600;'>{dm['confidence']}% verified</span>" if dm.get('confidence', 0) > 50 else ""
+                li_snippet = f" · <a href='{dm['linkedin_url']}' target='_blank' style='color:#0A66C2; font-weight:700;'>🔗 LinkedIn</a>" if dm.get("linkedin_url") else ""
                 st.markdown(
-                    f"**👤 {dm['name']}** — *{dm['position']}* {conf_badge}<br>"
+                    f"**👤 {dm['name']}** — *{dm['position']}* {conf_badge}{li_snippet}<br>"
                     f"<code>{dm['email']}</code>",
                     unsafe_allow_html=True
                 )
             with dm_c2:
                 if st.button("👉 Select Contact", key=f"apply_dm_{key_prefix}_{lead_id}_{idx}"):
-                    db.update_lead(
-                        lead_id,
-                        company_website=resolved_url,
-                        contact_name=dm["name"],
-                        contact_role=dm["position"],
-                        contact_email=dm["email"],
-                    )
+                    up_kwargs = {
+                        "company_website": resolved_url,
+                        "contact_name": dm["name"],
+                        "contact_role": dm["position"],
+                        "contact_email": dm["email"],
+                    }
+                    if dm.get("linkedin_url"):
+                        up_kwargs["contact_linkedin"] = dm["linkedin_url"]
+                    db.update_lead(lead_id, **up_kwargs)
                     st.success(f"Assigned {dm['name']} ({dm['email']}) as primary contact!")
                     del st.session_state[f"dms_{lead_id}"]
                     st.rerun()
@@ -806,7 +822,21 @@ if st.session_state["active_tab"] == "Today":
                 c1, c2 = st.columns([3, 1])
                 with c1:
                     st.markdown(f"**Decision Maker:** `{lead.get('contact_name') or 'N/A'}` ({lead.get('contact_role') or 'Role unknown'})")
-                    st.markdown(f"**Email:** `{lead.get('contact_email') or 'unknown'}` · **Website:** [{lead.get('company_website')}]({lead.get('company_website')})")
+                    contact_channels = [f"**Email:** `{lead.get('contact_email') or 'unknown'}`"]
+                    if lead.get("contact_phone"):
+                        contact_channels.append(f"**Phone:** `{lead.get('contact_phone')}`")
+                    if lead.get("company_website"):
+                        contact_channels.append(f"**Website:** [{lead.get('company_website')}]({lead.get('company_website')})")
+                    st.markdown(" · ".join(contact_channels))
+
+                    t_li = lead.get("contact_linkedin") or ""
+                    t_li_url = get_linkedin_profile_url(lead.get("contact_name") or "", lead.get("company_name") or "", t_li)
+                    t_li_label = "🔗 LinkedIn Profile (Apollo Reveal)" if (t_li and "linkedin.com" in t_li) else "🔗 Find on LinkedIn (Apollo Reveal)"
+                    st.markdown(
+                        f'<a href="{t_li_url}" target="_blank" style="display:inline-block; padding:4px 10px; background:#0A66C2; color:white !important; font-size:0.78rem; font-weight:700; border-radius:5px; text-decoration:none; margin-top:2px; margin-bottom:6px;">{t_li_label}</a>',
+                        unsafe_allow_html=True
+                    )
+
                     render_hunter_decision_makers_ui(lead, key_prefix="today")
                     st.markdown(f"**Fit Observation:** {lead.get('reason')}")
                     st.markdown(f"**Subject:** {lead.get('subject')}")
@@ -1321,15 +1351,34 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     st.markdown("##### 📞 Direct Outbound Line")
                     if c_phone:
                         st.markdown(
-                            f'<a href="tel:{c_phone}" style="display:block; text-align:center; padding:12px 14px; background:#10B981; color:white; font-family:monospace; font-weight:700; font-size:1.15rem; border-radius:8px; text-decoration:none; margin-bottom:10px; box-shadow: 0 2px 8px rgba(16,185,129,0.25);">📞 Call {c_phone}</a>',
+                            f'<a href="tel:{c_phone}" style="display:block; text-align:center; padding:12px 14px; background:#10B981; color:white; font-family:monospace; font-weight:700; font-size:1.15rem; border-radius:8px; text-decoration:none; margin-bottom:8px; box-shadow: 0 2px 8px rgba(16,185,129,0.25);">📞 Call {c_phone}</a>',
                             unsafe_allow_html=True,
                         )
                     else:
                         st.warning("No phone on file.")
-                        new_p = st.text_input("Enter Direct Phone", key=f"quick_p_{lead_id}")
-                        if st.button("Save Phone", key=f"save_p_{lead_id}"):
-                            scrub = lead_engine.scrub_and_format_phone(new_p)
-                            db.update_lead(lead_id, contact_phone=scrub["phone"], phone_status=scrub["status"])
+
+                    # 1-Click LinkedIn / Apollo Phone Reveal Button
+                    li_url = get_linkedin_profile_url(c_name, comp_name, c_li)
+                    li_label = "🔗 Open LinkedIn (Apollo Reveal)" if (c_li and "linkedin.com" in c_li) else "🔗 Find on LinkedIn (Apollo Reveal)"
+                    st.markdown(
+                        f'<a href="{li_url}" target="_blank" style="display:block; text-align:center; padding:10px 14px; background:#0A66C2; color:white !important; font-family:\'Plus Jakarta Sans\', sans-serif; font-weight:700; font-size:0.9rem; border-radius:8px; text-decoration:none; margin-bottom:4px; box-shadow: 0 2px 8px rgba(10,102,194,0.3);">{li_label}</a>',
+                        unsafe_allow_html=True,
+                    )
+                    st.caption("💡 *Open on LinkedIn. Free Apollo Chrome Extension pops up to reveal direct phone.*")
+
+                    # Quick Phone & LinkedIn Profile Editor
+                    with st.expander("✏️ Update Phone / LinkedIn Profile", expanded=(not c_phone)):
+                        edit_ph = st.text_input("Direct Phone", value=c_phone, key=f"quick_p_{lead_id}", placeholder="+1 (555) 000-0000")
+                        edit_li = st.text_input("LinkedIn Profile URL", value=c_li, key=f"quick_li_{lead_id}", placeholder="https://www.linkedin.com/in/...")
+                        if st.button("💾 Save Contact Info", key=f"save_ci_{lead_id}"):
+                            scrub = lead_engine.scrub_and_format_phone(edit_ph) if edit_ph else {"phone": "", "status": "needs_enrichment"}
+                            db.update_lead(
+                                lead_id,
+                                contact_phone=scrub["phone"],
+                                phone_status=scrub["status"] if edit_ph else "needs_enrichment",
+                                contact_linkedin=edit_li.strip(),
+                            )
+                            st.success("Updated contact info!")
                             st.rerun()
 
                     # Quick Links
@@ -1340,7 +1389,9 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     if c_email and c_email != "unknown":
                         ch_links.append(f"[✉️ {c_email}](mailto:{c_email})")
                     if c_li:
-                        ch_links.append(f"[🔗 LinkedIn]({c_li})")
+                        ch_links.append(f"[🔗 Profile]({c_li})")
+                    else:
+                        ch_links.append(f"[🔗 Search]({li_url})")
 
                     if ch_links:
                         st.markdown(" · ".join(ch_links))
@@ -1457,6 +1508,18 @@ elif st.session_state["active_tab"] == "Pipeline":
                     st.markdown(f"**Website:** [{lead.get('company_website')}]({lead.get('company_website')})")
                     st.markdown(f"**Contact:** {lead.get('contact_name') or 'N/A'} ({lead.get('contact_role') or 'Unknown'})")
                     st.markdown(f"**Email:** `{lead.get('contact_email') or 'unknown'}`")
+                    p_phone = lead.get("contact_phone") or ""
+                    if p_phone:
+                        st.markdown(f"**Direct Phone:** `{p_phone}`")
+
+                    p_li = lead.get("contact_linkedin") or ""
+                    p_li_url = get_linkedin_profile_url(lead.get("contact_name") or "", lead.get("company_name") or "", p_li)
+                    p_li_label = "🔗 LinkedIn Profile (Apollo Reveal)" if (p_li and "linkedin.com" in p_li) else "🔗 Find on LinkedIn (Apollo Reveal)"
+                    st.markdown(
+                        f'<a href="{p_li_url}" target="_blank" style="display:inline-block; padding:5px 11px; background:#0A66C2; color:white !important; font-size:0.78rem; font-weight:700; border-radius:5px; text-decoration:none; margin-top:3px; margin-bottom:6px;">{p_li_label}</a>',
+                        unsafe_allow_html=True
+                    )
+
                     render_hunter_decision_makers_ui(lead, key_prefix="pipe")
                     st.markdown(f"**Category:** `{cat_label}`")
                     st.markdown(f"**Angle:** {lead.get('reason')}")
@@ -1471,9 +1534,19 @@ elif st.session_state["active_tab"] == "Pipeline":
                     new_val = st.number_input("Deal Value ($)", value=float(lead.get("deal_value") or 15000.0), step=1000.0, key=f"val_{lead['id']}")
                     cur_idx = [s[0] for s in db.PIPELINE_STAGES].index(lead.get("pipeline_stage", "draft_ready"))
                     new_stage = st.selectbox("Stage", [s[0] for s in db.PIPELINE_STAGES], index=cur_idx, format_func=lambda s: db.STAGE_LABELS.get(s, s), key=f"p_stg_{lead['id']}")
+                    new_p_phone = st.text_input("Direct Phone", value=lead.get("contact_phone") or "", key=f"p_ph_{lead['id']}")
+                    new_p_li = st.text_input("LinkedIn URL", value=lead.get("contact_linkedin") or "", placeholder="https://www.linkedin.com/in/...", key=f"p_li_{lead['id']}")
 
                     if st.button("💾 Save Updates", key=f"save_p_{lead['id']}", type="primary"):
-                        db.update_lead(lead["id"], subject=new_subj, body=new_b, deal_value=new_val, pipeline_stage=new_stage)
+                        db.update_lead(
+                            lead["id"],
+                            subject=new_subj,
+                            body=new_b,
+                            deal_value=new_val,
+                            pipeline_stage=new_stage,
+                            contact_phone=new_p_phone.strip(),
+                            contact_linkedin=new_p_li.strip(),
+                        )
                         st.success("Updated!")
                         st.rerun()
 
@@ -1573,11 +1646,12 @@ elif st.session_state["active_tab"] == "Contacts":
     if leads:
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["ID", "Company", "Website", "Contact Name", "Role", "Email", "Phone", "Industry Tag", "Deal Value", "Stage", "Notes", "Created At"])
+        writer.writerow(["ID", "Company", "Website", "Contact Name", "Role", "Email", "Phone", "LinkedIn", "Industry Tag", "Deal Value", "Stage", "Notes", "Created At"])
         for l in leads:
             writer.writerow([
                 l["id"], l["company_name"], l["company_website"], l.get("contact_name", ""),
                 l.get("contact_role", ""), l["contact_email"], l.get("contact_phone", ""),
+                l.get("contact_linkedin", ""),
                 l.get("industry_tag", ""), l.get("deal_value", ""), l.get("pipeline_stage", ""),
                 l.get("notes", ""), l["created_at"]
             ])
@@ -1605,6 +1679,18 @@ elif st.session_state["active_tab"] == "Contacts":
                     st.markdown(f"**Contact:** `{lead.get('contact_name') or 'N/A'}`")
                     st.markdown(f"**Role:** *{lead.get('contact_role') or 'Unknown'}*")
                     st.markdown(f"**Email:** `{lead['contact_email']}`")
+                    c_phone = lead.get("contact_phone") or ""
+                    if c_phone:
+                        st.markdown(f"**Direct Phone:** `{c_phone}`")
+
+                    c_li = lead.get("contact_linkedin") or ""
+                    c_li_url = get_linkedin_profile_url(lead.get("contact_name") or "", lead.get("company_name") or "", c_li)
+                    c_li_label = "🔗 LinkedIn Profile (Apollo Reveal)" if (c_li and "linkedin.com" in c_li) else "🔗 Find on LinkedIn (Apollo Reveal)"
+                    st.markdown(
+                        f'<a href="{c_li_url}" target="_blank" style="display:inline-block; padding:5px 11px; background:#0A66C2; color:white !important; font-size:0.78rem; font-weight:700; border-radius:5px; text-decoration:none; margin-top:3px; margin-bottom:6px;">{c_li_label}</a>',
+                        unsafe_allow_html=True
+                    )
+
                     render_hunter_decision_makers_ui(lead, key_prefix="contacts")
                     if lead.get("reason"):
                         st.markdown(f"**Sales Angle:** {lead.get('reason')}")
@@ -1629,6 +1715,7 @@ elif st.session_state["active_tab"] == "Contacts":
                         format_func=lambda s: db.STAGE_LABELS.get(s, s)
                     )
                     new_phone = st.text_input("Direct Phone", lead.get("contact_phone") or "", key=f"c_ph_{lead['id']}")
+                    new_linkedin = st.text_input("LinkedIn Profile URL", lead.get("contact_linkedin") or "", placeholder="https://www.linkedin.com/in/...", key=f"c_li_{lead['id']}")
                     new_val = st.number_input("Deal Value ($)", value=float(lead.get("deal_value") or 15000.0), step=1000.0, key=f"c_val_{lead['id']}")
 
                     if st.button("💾 Save Lead Details", key=f"save_lead_c_{lead['id']}", type="primary"):
@@ -1637,6 +1724,7 @@ elif st.session_state["active_tab"] == "Contacts":
                             industry_tag=new_cat,
                             pipeline_stage=new_stg,
                             contact_phone=new_phone.strip(),
+                            contact_linkedin=new_linkedin.strip(),
                             deal_value=new_val
                         )
                         st.success("Lead details updated!")

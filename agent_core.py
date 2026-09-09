@@ -216,6 +216,7 @@ def execute_find_employee_contact(domain: str, contact_name: str = "") -> dict:
                         "name": contact_name,
                         "position": edata.get("position") or "",
                         "email": edata["email"],
+                        "linkedin_url": edata.get("linkedin_url") or "",
                         "source": "hunter_finder",
                     }
         except Exception:
@@ -245,6 +246,7 @@ def execute_find_employee_contact(domain: str, contact_name: str = "") -> dict:
                     "name": fullname or contact_name,
                     "position": top.get("position") or "",
                     "email": top.get("value") or "unknown",
+                    "linkedin_url": top.get("linkedin_url") or "",
                     "source": "hunter_domain",
                 }
             # Fallback to domain email
@@ -300,6 +302,7 @@ def get_top_decision_makers(domain: str, limit: int = 3) -> list:
                     "email": e.get("value") or "",
                     "confidence": e.get("confidence") or 0,
                     "type": e.get("type", "personal"),
+                    "linkedin_url": e.get("linkedin_url") or "",
                 })
             return results
     except Exception:
@@ -402,6 +405,8 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
             skipped_duplicates.append(company_name)
             continue
 
+        contact_linkedin = c.get("contact_linkedin") or c.get("linkedin_url") or ""
+
         # Run Hunter.io enrichment to get verified executive email
         if domain:
             hunter_info = execute_find_employee_contact(domain, contact_name=contact_name)
@@ -411,6 +416,8 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
                 contact_name = hunter_info["name"]
             if hunter_info.get("position") and hunter_info.get("position") != "Company Contact":
                 contact_role = hunter_info["position"]
+            if hunter_info.get("linkedin_url"):
+                contact_linkedin = hunter_info["linkedin_url"]
 
         # Fallback email if still missing
         if not contact_email or contact_email == "unknown":
@@ -438,6 +445,7 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
             contact_name=contact_name,
             contact_role=contact_role,
             contact_email=contact_email,
+            contact_linkedin=contact_linkedin,
             industry_tag=industry_tag,
             deal_value=deal_val,
             pipeline_stage="draft_ready",
@@ -458,6 +466,7 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
             "contact_name": contact_name,
             "contact_role": contact_role,
             "contact_email": contact_email,
+            "contact_linkedin": contact_linkedin,
             "industry_tag": industry_tag,
             "deal_value": deal_val,
             "pipeline_stage": "draft_ready",

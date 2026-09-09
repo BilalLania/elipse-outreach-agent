@@ -174,8 +174,8 @@ def parse_and_enrich_csv(csv_content: str, max_records: int = 300) -> dict:
     c_last = match_col(["last_name", "lastname"])
     c_role = match_col(["title", "role", "job_title", "position"])
     c_email = match_col(["email", "contact_email", "work_email", "corporate_email", "primary_email"])
-    c_phone = match_col(["phone", "direct_phone", "mobile_phone", "corporate_phone", "phone_number", "mobile", "cell"])
-    c_linkedin = match_col(["linkedin", "linkedin_url", "person_linkedin_url", "profile_url"])
+    c_phone = match_col(["phone", "direct_phone", "mobile_phone", "corporate_phone", "phone_number", "mobile", "cell", "work_phone"])
+    c_linkedin = match_col(["linkedin", "linkedin_url", "person_linkedin_url", "profile_url", "contact_linkedin_url", "person_linkedin", "contact_linkedin", "company_linkedin_url", "company_linkedin"])
     c_industry = match_col(["industry", "category", "keywords", "tags"])
     c_deal = match_col(["revenue", "annual_revenue", "deal_value", "estimated_value"])
 

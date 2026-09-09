@@ -206,6 +206,8 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Hal Garrett",
         "contact_role": "President & Owner",
         "contact_email": "halg@gowithgarretts.com",
+        "contact_phone": "+1 (843) 881-8883",
+        "contact_linkedin": "https://www.linkedin.com/in/hal-garrett-b02b6623",
         "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 18500.0,
         "reason": "Buyers customize body paint, upholstery stitching, lift kits, and rim styles using static gallery photos, leading to drop-offs before requesting a quote.",
@@ -218,6 +220,8 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Custom Sales Team",
         "contact_role": "Head of Custom Sales",
         "contact_email": "sales@tidewatercarts.com",
+        "contact_phone": "+1 (803) 865-8016",
+        "contact_linkedin": "https://www.linkedin.com/company/tidewater-carts",
         "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 21000.0,
         "reason": "Offers extensive custom colors, tops, and high-performance lift packages, but currently relies on static inventory listings.",
@@ -230,6 +234,8 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Custom Build Team",
         "contact_role": "Head of Sales",
         "contact_email": "sales@performancegolfcarts.com",
+        "contact_phone": "+1 (800) 508-4813",
+        "contact_linkedin": "https://www.linkedin.com/company/performance-golf-carts",
         "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 19500.0,
         "reason": "High-volume custom builder with extensive parts & accessories inventory that would see higher conversions with live 3D visual customization.",
@@ -242,6 +248,8 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Sales & Design Team",
         "contact_role": "Director of Sales",
         "contact_email": "sales@apexgolfcarts.com",
+        "contact_phone": "+1 (949) 328-9899",
+        "contact_linkedin": "https://www.linkedin.com/company/apex-golf-carts",
         "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 17500.0,
         "reason": "Specializes in luxury street-legal electric carts with premium custom finishes that require high-end 3D visualization.",
@@ -254,6 +262,8 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Custom Build Division",
         "contact_role": "Head of Custom Engineering & Sales",
         "contact_email": "info@streetrodgolfcars.com",
+        "contact_phone": "+1 (712) 324-4900",
+        "contact_linkedin": "https://www.linkedin.com/company/streetrod-golf-cars",
         "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 18000.0,
         "reason": "Handcrafted vintage hot rod replica golf carts with bespoke paint and chrome options, ideal for high-ticket 3D interactive customization.",
@@ -301,11 +311,14 @@ def seed_or_update_core_leads():
             cname = lead["company_name"]
             existing = conn.execute("SELECT id FROM leads WHERE LOWER(company_name) = LOWER(?)", (cname,)).fetchone()
             now = datetime.now().isoformat(timespec="seconds")
+            phone = lead.get("contact_phone", "")
+            linkedin = lead.get("contact_linkedin", "")
             if existing:
                 conn.execute(
                     """UPDATE leads SET
                        company_website = ?, contact_name = ?, contact_role = ?,
-                       contact_email = ?, industry_tag = ?, deal_value = ?,
+                       contact_email = ?, contact_phone = ?, contact_linkedin = ?,
+                       industry_tag = ?, deal_value = ?,
                        reason = ?, subject = ?, body = ?, updated_at = ?
                        WHERE id = ?""",
                     (
@@ -313,6 +326,8 @@ def seed_or_update_core_leads():
                         lead["contact_name"],
                         lead["contact_role"],
                         lead["contact_email"],
+                        phone,
+                        linkedin,
                         lead["industry_tag"],
                         lead["deal_value"],
                         lead["reason"],
@@ -326,15 +341,17 @@ def seed_or_update_core_leads():
                 conn.execute(
                     """INSERT INTO leads
                        (company_name, company_website, contact_name, contact_role, contact_email,
-                        industry_tag, deal_value, pipeline_stage, status, reason, subject, body,
-                        source_prompt, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft_ready', 'new', ?, ?, ?, 'Golf Cart Customization USA', ?, ?)""",
+                        contact_phone, contact_linkedin, industry_tag, deal_value, pipeline_stage,
+                        status, reason, subject, body, source_prompt, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft_ready', 'new', ?, ?, ?, 'Golf Cart Customization USA', ?, ?)""",
                     (
                         lead["company_name"],
                         lead["company_website"],
                         lead["contact_name"],
                         lead["contact_role"],
                         lead["contact_email"],
+                        phone,
+                        linkedin,
                         lead["industry_tag"],
                         lead["deal_value"],
                         lead["reason"],
