@@ -6,6 +6,7 @@ Luxury editorial design matching reference specifications with Dark/Light theme 
 import os
 import io
 import csv
+import time
 import textwrap
 import urllib.parse
 from datetime import datetime, date
