@@ -376,21 +376,38 @@ div[data-testid="stWidgetLabel"] p {{
     font-size: 0.85rem !important;
 }}
 
-/* Selectbox */
+/* Selectbox & Multiselect - Complete Tree Override */
+div[data-testid="stSelectbox"],
+div[data-testid="stSelectbox"] > div,
+div[data-testid="stSelectbox"] div,
 div[data-baseweb="select"],
 div[data-baseweb="select"] > div,
-div[data-testid="stSelectbox"] > div,
-div[data-testid="stSelectbox"] div[data-baseweb="select"] {{
+div[data-baseweb="select"] div,
+div[data-baseweb="select"] [role="combobox"],
+div[data-baseweb="select"] [aria-haspopup="listbox"],
+div[data-baseweb="select"] [data-baseweb="base-input"],
+div[data-baseweb="select"] input,
+div[data-testid="stMultiSelect"],
+div[data-testid="stMultiSelect"] > div,
+div[data-testid="stMultiSelect"] div,
+div[data-testid="stMultiSelect"] [data-baseweb="select"] div {{
     background-color: {INPUT_BG} !important;
     background: {INPUT_BG} !important;
-    border: 1px solid {CARD_BORDER} !important;
+    border-color: {CARD_BORDER} !important;
     color: {TEXT_COLOR} !important;
-    border-radius: 8px !important;
+    -webkit-text-fill-color: {TEXT_COLOR} !important;
 }}
 
 div[data-baseweb="select"] span,
-div[data-baseweb="select"] div {{
+div[data-baseweb="select"] p,
+div[data-baseweb="select"] svg,
+div[data-baseweb="select"] path,
+div[data-testid="stSelectbox"] span,
+div[data-testid="stSelectbox"] svg,
+div[data-testid="stSelectbox"] path {{
     color: {TEXT_COLOR} !important;
+    fill: {TEXT_COLOR} !important;
+    -webkit-text-fill-color: {TEXT_COLOR} !important;
 }}
 
 /* Popover Floating Body & Dropdown Menus */
@@ -398,8 +415,11 @@ div[data-testid="stPopoverBody"],
 div[data-testid="stPopoverContent"],
 div[data-baseweb="popover"],
 div[data-baseweb="popover"] > div,
+div[data-baseweb="popover"] div,
 div[data-baseweb="menu"],
-ul[data-baseweb="menu"] {{
+ul[data-baseweb="menu"],
+ul[data-baseweb="menu"] div,
+ul[data-baseweb="menu"] li {{
     background-color: {CARD_BG} !important;
     background: {CARD_BG} !important;
     border: 1px solid {CARD_BORDER} !important;
@@ -408,13 +428,21 @@ ul[data-baseweb="menu"] {{
     box-shadow: 0 8px 30px rgba(0,0,0,0.25) !important;
 }}
 
-li[data-baseweb="menu-item"] {{
+li[data-baseweb="menu-item"],
+li[data-baseweb="menu-item"] div,
+li[data-baseweb="menu-item"] span,
+li[data-baseweb="menu-item"] p {{
     color: {TEXT_COLOR} !important;
     background-color: {CARD_BG} !important;
+    background: {CARD_BG} !important;
 }}
 
-li[data-baseweb="menu-item"]:hover {{
+li[data-baseweb="menu-item"]:hover,
+li[data-baseweb="menu-item"]:hover div,
+li[data-baseweb="menu-item"]:hover span,
+li[data-baseweb="menu-item"]:hover p {{
     background-color: {TAG_BG} !important;
+    background: {TAG_BG} !important;
     color: {ACCENT_COLOR} !important;
 }}
 
@@ -1750,6 +1778,7 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                         </div>
                         <div style="font-size:0.9rem; color:{TEXT_COLOR}; margin-top:4px;">
                             👤 <b>{c_name}</b> · <span style="color:{TEXT_MUTED};">{c_role}</span>
+                            {f' · ✉️ <a href="mailto:{c_email}" style="color:{ACCENT_COLOR}; text-decoration:underline;">{c_email}</a>' if (c_email and c_email != "unknown") else ' · <span style="color:#EF4444; font-size:0.8rem;">(No email on file)</span>'}
                         </div>
                     </div>
                 </div>
@@ -1768,12 +1797,28 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     else:
                         st.warning("No phone on file.")
 
+                    # Direct Email Action
+                    if c_email and c_email != "unknown" and "@" in c_email:
+                        enc_subj = urllib.parse.quote(lead.get("subject", f"Interactive 3D configurator for {comp_name}"))
+                        enc_body = urllib.parse.quote(lead.get("body", ""))
+                        mailto_url = f"mailto:{c_email}?subject={enc_subj}&body={enc_body}"
+                        st.markdown(
+                            f'<a href="{mailto_url}" target="_blank" style="display:block; text-align:center; padding:10px 14px; background:#3B82F6; color:white; font-family:\'Plus Jakarta Sans\', sans-serif; font-weight:700; font-size:0.95rem; border-radius:8px; text-decoration:none; margin-bottom:10px; box-shadow: 0 2px 8px rgba(59,130,246,0.25);">📧 Send Pitch Email</a>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(
+                            f'<div style="text-align:center; padding:7px 10px; background:{INPUT_BG}; border:1px dashed {CARD_BORDER}; border-radius:8px; color:{TEXT_MUTED}; font-size:0.8rem; margin-bottom:10px;">✉️ No email on file — edit below or reveal via Hunter.io</div>',
+                            unsafe_allow_html=True,
+                        )
+
                     # LinkedIn Research & Apollo Phone Reveal
                     render_linkedin_research_and_reveal_ui(lead, key_prefix=f"cc_{lead_id}")
 
-                    # Quick Phone & LinkedIn Profile Editor (collapsed by default)
-                    with st.expander("✏️ Edit Phone / LinkedIn", expanded=False):
+                    # Quick Phone, Email & LinkedIn Profile Editor (collapsed by default)
+                    with st.expander("✏️ Edit Phone, Email & LinkedIn", expanded=False):
                         edit_ph = st.text_input("Direct Phone", value=c_phone, key=f"quick_p_{lead_id}", placeholder="+1 (555) 000-0000")
+                        edit_em = st.text_input("Contact Email", value=c_email if c_email != "unknown" else "", key=f"quick_em_{lead_id}", placeholder="halg@company.com")
                         edit_li = st.text_input("LinkedIn Profile URL", value=c_li, key=f"quick_li_{lead_id}", placeholder="https://www.linkedin.com/in/...")
                         if st.button("💾 Save Contact Info", key=f"save_ci_{lead_id}"):
                             scrub = lead_engine.scrub_and_format_phone(edit_ph) if edit_ph else {"phone": "", "status": "needs_enrichment"}
@@ -1781,6 +1826,7 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                                 lead_id,
                                 contact_phone=scrub["phone"],
                                 phone_status=scrub["status"] if edit_ph else "needs_enrichment",
+                                contact_email=edit_em.strip() or "unknown",
                                 contact_linkedin=edit_li.strip(),
                             )
                             st.success("Updated contact info!")
@@ -1910,7 +1956,14 @@ elif st.session_state["active_tab"] == "Pipeline":
                     st.markdown("#### 🏢 Company & Contact")
                     st.markdown(f"**Website:** [{lead.get('company_website')}]({lead.get('company_website')})")
                     st.markdown(f"**Contact:** {lead.get('contact_name') or 'N/A'} ({lead.get('contact_role') or 'Unknown'})")
-                    st.markdown(f"**Email:** `{lead.get('contact_email') or 'unknown'}`")
+                    p_email = lead.get('contact_email') or ""
+                    st.markdown(f"**Email:** `{p_email or 'unknown'}`")
+                    if p_email and p_email != "unknown" and "@" in p_email:
+                        enc_subj = urllib.parse.quote(lead.get("subject", f"Interactive 3D configurator for {lead['company_name']}"))
+                        enc_body = urllib.parse.quote(lead.get("body", ""))
+                        mailto_pipe = f"mailto:{p_email}?subject={enc_subj}&body={enc_body}"
+                        st.markdown(f'<a href="{mailto_pipe}" target="_blank" style="display:inline-block; padding:5px 12px; background-color:{ACCENT_COLOR}; color:white; text-decoration:none; border-radius:6px; font-weight:600; font-size:0.82rem; margin-top:3px; margin-bottom:8px;">📧 Send Pitch Email</a>', unsafe_allow_html=True)
+
                     p_phone = lead.get("contact_phone") or ""
                     if p_phone:
                         st.markdown(f"**Direct Phone:** `{p_phone}`")
@@ -1931,6 +1984,7 @@ elif st.session_state["active_tab"] == "Pipeline":
                     new_val = st.number_input("Deal Value ($)", value=float(lead.get("deal_value") or 15000.0), step=1000.0, key=f"val_{lead['id']}")
                     cur_idx = [s[0] for s in db.PIPELINE_STAGES].index(lead.get("pipeline_stage", "draft_ready"))
                     new_stage = st.selectbox("Stage", [s[0] for s in db.PIPELINE_STAGES], index=cur_idx, format_func=lambda s: db.STAGE_LABELS.get(s, s), key=f"p_stg_{lead['id']}")
+                    new_p_email = st.text_input("Contact Email", value=p_email if p_email != "unknown" else "", placeholder="contact@company.com", key=f"p_em_{lead['id']}")
                     new_p_phone = st.text_input("Direct Phone", value=lead.get("contact_phone") or "", key=f"p_ph_{lead['id']}")
                     new_p_li = st.text_input("LinkedIn URL", value=lead.get("contact_linkedin") or "", placeholder="https://www.linkedin.com/in/...", key=f"p_li_{lead['id']}")
 
@@ -1941,6 +1995,7 @@ elif st.session_state["active_tab"] == "Pipeline":
                             body=new_b,
                             deal_value=new_val,
                             pipeline_stage=new_stage,
+                            contact_email=new_p_email.strip() or "unknown",
                             contact_phone=new_p_phone.strip(),
                             contact_linkedin=new_p_li.strip(),
                         )
@@ -1951,12 +2006,12 @@ elif st.session_state["active_tab"] == "Pipeline":
                         db.delete_lead(lead["id"])
                         st.rerun()
 
-                    email_target = lead["contact_email"]
+                    email_target = lead.get("contact_email")
                     if email_target and email_target != "unknown" and "@" in email_target:
                         encoded_subj = urllib.parse.quote(new_subj)
                         encoded_body = urllib.parse.quote(new_b)
                         mailto_url = f"mailto:{email_target}?subject={encoded_subj}&body={encoded_body}"
-                        st.markdown(f'<a href="{mailto_url}" target="_blank" style="display:block; text-align:center; padding:6px 12px; background-color:{ACCENT_COLOR}; color:white; text-decoration:none; border-radius:6px; font-weight:600; margin-top:8px;">📧 Open in Mail App</a>', unsafe_allow_html=True)
+                        st.markdown(f'<a href="{mailto_url}" target="_blank" style="display:block; text-align:center; padding:8px 12px; background-color:{ACCENT_COLOR}; color:white; text-decoration:none; border-radius:6px; font-weight:700; margin-top:8px;">📧 Open in Mail App</a>', unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -2075,7 +2130,15 @@ elif st.session_state["active_tab"] == "Contacts":
                     st.markdown(f"**Company:** [{lead['company_name']}]({lead.get('company_website')})")
                     st.markdown(f"**Contact:** `{lead.get('contact_name') or 'N/A'}`")
                     st.markdown(f"**Role:** *{lead.get('contact_role') or 'Unknown'}*")
-                    st.markdown(f"**Email:** `{lead['contact_email']}`")
+                    c_em = lead.get('contact_email') or ""
+                    st.markdown(f"**Email:** `{c_em or 'unknown'}`")
+                    if c_em and c_em != "unknown" and "@" in c_em:
+                        encoded_subj = urllib.parse.quote(lead.get("subject", f"Question regarding {lead['company_name']}"))
+                        encoded_body = urllib.parse.quote(lead.get("body", ""))
+                        mailto_url = f"mailto:{c_em}?subject={encoded_subj}&body={encoded_body}"
+                        st.markdown(f'<a href="{mailto_url}" target="_blank" style="display:inline-block; margin-top:3px; margin-bottom:8px; padding:6px 14px; background-color:{ACCENT_COLOR}; color:white; text-decoration:none; border-radius:6px; font-weight:600; font-size:0.85rem; box-shadow:0 2px 6px rgba(0,0,0,0.15);">📧 Send Pitch Email</a>', unsafe_allow_html=True)
+                    else:
+                        st.caption("No valid email on file.")
                     c_phone = lead.get("contact_phone") or ""
                     if c_phone:
                         st.markdown(f"**Direct Phone:** `{c_phone}`")
@@ -2105,6 +2168,7 @@ elif st.session_state["active_tab"] == "Contacts":
                         key=f"c_stg_{lead['id']}",
                         format_func=lambda s: db.STAGE_LABELS.get(s, s)
                     )
+                    new_email = st.text_input("Contact Email", value=c_em if c_em != "unknown" else "", placeholder="contact@company.com", key=f"c_em_{lead['id']}")
                     new_phone = st.text_input("Direct Phone", lead.get("contact_phone") or "", key=f"c_ph_{lead['id']}")
                     new_linkedin = st.text_input("LinkedIn Profile URL", lead.get("contact_linkedin") or "", placeholder="https://www.linkedin.com/in/...", key=f"c_li_{lead['id']}")
                     new_val = st.number_input("Deal Value ($)", value=float(lead.get("deal_value") or 15000.0), step=1000.0, key=f"c_val_{lead['id']}")
@@ -2112,6 +2176,7 @@ elif st.session_state["active_tab"] == "Contacts":
                     if st.button("💾 Save Lead Details", key=f"save_lead_c_{lead['id']}", type="primary"):
                         db.update_lead(
                             lead["id"],
+                            contact_email=new_email.strip() or "unknown",
                             industry_tag=new_cat,
                             pipeline_stage=new_stg,
                             contact_phone=new_phone.strip(),
@@ -2130,12 +2195,14 @@ elif st.session_state["active_tab"] == "Contacts":
                         st.rerun()
 
                     # Direct Mailto
-                    email_target = lead["contact_email"]
+                    email_target = lead.get("contact_email")
                     if email_target and email_target != "unknown" and "@" in email_target:
                         encoded_subj = urllib.parse.quote(lead.get("subject", f"Question regarding {lead['company_name']}"))
                         encoded_body = urllib.parse.quote(lead.get("body", ""))
                         mailto_url = f"mailto:{email_target}?subject={encoded_subj}&body={encoded_body}"
-                        st.markdown(f'<a href="{mailto_url}" target="_blank" style="display:block; text-align:center; padding:6px 12px; background-color:{ACCENT_COLOR}; color:white; text-decoration:none; border-radius:6px; font-weight:600; margin-top:8px;">📧 Open in Email App</a>', unsafe_allow_html=True)
+                        st.markdown(f'<a href="{mailto_url}" target="_blank" style="display:block; text-align:center; padding:9px 14px; background-color:{ACCENT_COLOR}; color:white; text-decoration:none; border-radius:6px; font-weight:700; margin-top:8px;">📧 Open in Email App</a>', unsafe_allow_html=True)
+                    else:
+                        st.caption("No valid email saved. Enter email in Classification & Deal to send pitch.")
 
 
 # ---------------------------------------------------------------------------
