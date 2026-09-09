@@ -12,9 +12,33 @@ from datetime import datetime, date
 from dotenv import load_dotenv
 import streamlit as st
 
+import importlib
 import db
+try:
+    importlib.reload(db)
+except Exception:
+    pass
+
 import agent_core
+try:
+    importlib.reload(agent_core)
+except Exception:
+    pass
+
 import team_analytics
+try:
+    importlib.reload(team_analytics)
+except Exception:
+    pass
+
+STANDARD_CATEGORIES = getattr(db, "STANDARD_CATEGORIES", [
+    "⛳ Custom Golf Carts",
+    "🏎️ Custom Automotive & Mobility",
+    "🛋️ Luxury Furniture & Interiors",
+    "🏗️ Real Estate & Megaprojects",
+    "⛵ Superyachts & Marine",
+    "⚡ Tech & Commercial Products",
+])
 
 def clean_html(html_str: str) -> str:
     # Completely strip leading whitespace from every line to prevent Markdown from ever creating code blocks
@@ -438,7 +462,7 @@ with top_col3:
             new_crole = st.text_input("Role / Title", placeholder="e.g. Head of Marketing")
             new_cemail = st.text_input("Contact Email", placeholder="name@company.com")
             new_val = st.number_input("Estimated Deal Value ($)", value=18000.0, step=1000.0)
-            new_tag = st.selectbox("Industry Category", db.STANDARD_CATEGORIES)
+            new_tag = st.selectbox("Industry Category", STANDARD_CATEGORIES)
             new_stage = st.selectbox("Pipeline Stage", [s[0] for s in db.PIPELINE_STAGES], format_func=lambda s: db.STAGE_LABELS.get(s, s))
             new_reason = st.text_area("3D Configurator Angle / Reason", placeholder="Why this company needs an interactive 3D configurator...")
             new_submitted = st.form_submit_button("Save Lead to CRM", type="primary")
@@ -1059,7 +1083,7 @@ elif st.session_state["active_tab"] == "Pipeline":
     with col_cat:
         filter_cat = st.selectbox(
             "Category Filter",
-            ["All Categories"] + db.STANDARD_CATEGORIES,
+            ["All Categories"] + STANDARD_CATEGORIES,
         )
 
     leads = db.get_all_leads(stage_filter=filter_stage, search_query=search_query, category_filter=filter_cat)
@@ -1129,7 +1153,7 @@ elif st.session_state["active_tab"] == "Contacts":
         cat_counts[cat] = cat_counts.get(cat, 0) + 1
 
     # Standard categories first, then any extra categories present in DB
-    available_cats = [c for c in db.STANDARD_CATEGORIES if c in cat_counts]
+    available_cats = [c for c in STANDARD_CATEGORIES if c in cat_counts]
     for c in cat_counts:
         if c not in available_cats:
             available_cats.append(c)
@@ -1235,10 +1259,10 @@ elif st.session_state["active_tab"] == "Contacts":
                 with c2:
                     st.markdown("#### 🏷️ Classification & Deal")
                     cur_cat = lead.get("industry_tag") or "⚡ Tech & Commercial Products"
-                    cat_idx = db.STANDARD_CATEGORIES.index(cur_cat) if cur_cat in db.STANDARD_CATEGORIES else 0
+                    cat_idx = STANDARD_CATEGORIES.index(cur_cat) if cur_cat in STANDARD_CATEGORIES else 0
                     new_cat = st.selectbox(
                         "Category Sector",
-                        db.STANDARD_CATEGORIES,
+                        STANDARD_CATEGORIES,
                         index=cat_idx,
                         key=f"c_cat_{lead['id']}"
                     )

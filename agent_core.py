@@ -310,7 +310,15 @@ def get_top_decision_makers(domain: str, limit: int = 3) -> list:
 
 def map_to_standard_category(tag, company_name=""):
     t = (tag or "").strip()
-    if t in db.STANDARD_CATEGORIES:
+    standard_cats = getattr(db, "STANDARD_CATEGORIES", [
+        "⛳ Custom Golf Carts",
+        "🏎️ Custom Automotive & Mobility",
+        "🛋️ Luxury Furniture & Interiors",
+        "🏗️ Real Estate & Megaprojects",
+        "⛵ Superyachts & Marine",
+        "⚡ Tech & Commercial Products",
+    ])
+    if t in standard_cats:
         return t
     comb = (t + " " + company_name).lower()
     if any(k in comb for k in ["golf", "cart", "rad dog", "ckd", "tidewater", "garrett", "apex"]):
