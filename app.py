@@ -13,6 +13,7 @@ import streamlit as st
 
 import db
 import agent_core
+import team_analytics
 
 load_dotenv()
 
@@ -268,7 +269,7 @@ div[data-testid="stExpander"] {{
 }}
 
 /* Sidebar navigation buttons */
-.nav-btn {{
+.nav-btn {
     width: 100%;
     text-align: left;
     padding: 8px 12px;
@@ -277,7 +278,49 @@ div[data-testid="stExpander"] {{
     display: flex;
     align-items: center;
     justify-content: space-between;
-}}
+}
+
+/* Wall Street Terminal Styling */
+.terminal-ticker {
+    font-family: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace !important;
+    font-size: 1.85rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.03em !important;
+    line-height: 1.2 !important;
+}
+
+.terminal-pill-green {
+    background-color: rgba(16, 185, 129, 0.12);
+    color: #10B981;
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.terminal-pill-amber {
+    background-color: rgba(245, 158, 11, 0.12);
+    color: #F59E0B;
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.terminal-pill-blue {
+    background-color: rgba(59, 130, 246, 0.12);
+    color: #3B82F6;
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+}
 </style>
 """
 
@@ -307,6 +350,7 @@ with st.sidebar:
     # Navigation menu
     nav_options = [
         ("Today", "⊞", 0),
+        ("Sales Terminal", "⚡", 0),
         ("Pipeline", "💼", metrics.get("active_opportunities", 0)),
         ("Contacts", "👥", metrics.get("total_leads", 0)),
         ("Follow-ups", "📅", metrics.get("followups_due", 0)),
@@ -641,6 +685,31 @@ if st.session_state["active_tab"] == "Today":
             unsafe_allow_html=True,
         )
 
+    # Live Sales Floor Ticker Banner on Today View
+    team_data_quick = team_analytics.fetch_team_metrics(st.session_state.get("sheet_url", team_analytics.DEFAULT_GOOGLE_SHEET_URL))
+    tq = team_data_quick["total"]
+    tq_c1, tq_c2 = st.columns([4, 1.2])
+    with tq_c1:
+        st.markdown(
+            f"""
+            <div class="crm-card" style="padding: 1rem 1.25rem; border-left: 4px solid #10B981; margin-bottom: 1rem;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="terminal-pill-green">⚡ SALES FLOOR DESK</span>
+                    <span style="font-size:0.75rem; color:{TEXT_MUTED};">Live Sprint Velocity</span>
+                </div>
+                <div style="font-family:'JetBrains Mono', monospace; font-size:1.1rem; font-weight:700; color:{TEXT_COLOR}; margin-top:4px;">
+                    {tq['attempts']:,} Dials &nbsp;·&nbsp; {tq['live_interactions']} Live Calls &nbsp;·&nbsp; <span style="color:#10B981;">{tq['meetings_scheduled']} Meetings Booked</span> &nbsp;·&nbsp; <span style="color:{ACCENT_COLOR};">${tq['pipeline_value']:,.0f} Pipeline</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with tq_c2:
+        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+        if st.button("📊 Open Sales Terminal", key="goto_terminal_btn", use_container_width=True, type="primary"):
+            st.session_state["active_tab"] = "Sales Terminal"
+            st.rerun()
+
     # Pipeline at a Glance Card
     st.markdown(
         f"""
@@ -688,6 +757,242 @@ if st.session_state["active_tab"] == "Today":
                         encoded_body = urllib.parse.quote(lead.get("body", ""))
                         mailto_url = f"mailto:{email_target}?subject={encoded_subj}&body={encoded_body}"
                         st.markdown(f'<a href="{mailto_url}" target="_blank" style="display:block; text-align:center; padding:7px 12px; background-color:{ACCENT_COLOR}; color:white; text-decoration:none; border-radius:6px; font-weight:600; margin-top:8px;">📧 Open in Email Client</a>', unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# VIEW: SALES TERMINAL (Wall Street Outbound Velocity & Google Sheet Sync)
+# ---------------------------------------------------------------------------
+elif st.session_state["active_tab"] == "Sales Terminal":
+    if "sheet_url" not in st.session_state:
+        st.session_state["sheet_url"] = team_analytics.DEFAULT_GOOGLE_SHEET_URL
+
+    team_data = team_analytics.fetch_team_metrics(st.session_state["sheet_url"])
+
+    head_c1, head_c2 = st.columns([3, 1.8])
+    with head_c1:
+        st.markdown('<div class="date-eyebrow">WALL STREET OUTREACH TERMINAL // ELIPSE DESK</div>', unsafe_allow_html=True)
+        st.markdown('<div class="hero-heading" style="font-size: 2.2rem; margin-bottom: 0.2rem;">Sales Floor Velocity</div>', unsafe_allow_html=True)
+        st.markdown('<div class="subtitle">High-frequency outbound dials, live connections, and meeting pipeline generation.</div>', unsafe_allow_html=True)
+    with head_c2:
+        sync_badge = "🟢 LIVE GOOGLE SHEET SYNC" if team_data.get("is_live") else "🟡 CACHED BASELINE"
+        st.markdown(
+            f"""
+            <div style='text-align:right; margin-bottom: 6px;'>
+                <span class='terminal-pill-green'>{sync_badge}</span><br>
+                <span style='font-size:0.75rem; color:{TEXT_MUTED};'>Updated: {team_data.get('synced_at')}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        sync_btn_col1, sync_btn_col2 = st.columns([1, 1])
+        with sync_btn_col1:
+            if st.button("🔄 Sync Live Sheet", key="refresh_sheet_btn", use_container_width=True):
+                st.rerun()
+        with sync_btn_col2:
+            st.markdown(f'<a href="{st.session_state["sheet_url"]}" target="_blank" style="display:block; text-align:center; padding:7px 10px; background-color:{CARD_BG}; border:1px solid {CARD_BORDER}; color:{TEXT_COLOR}; text-decoration:none; border-radius:8px; font-size:0.85rem; font-weight:600;">↗ Open Sheet</a>', unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+
+    # Timeframe Horizon Selector
+    st.markdown("<div style='font-size:0.78rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:" + TEXT_MUTED + "; margin-bottom:6px;'>⏱️ SELECT SPRINT HORIZON</div>", unsafe_allow_html=True)
+    tf_cols = st.columns(4)
+    if "terminal_tf" not in st.session_state:
+        st.session_state["terminal_tf"] = "total"
+
+    with tf_cols[0]:
+        if st.button("📊 3-Week Aggregate", key="tf_total", type="primary" if st.session_state["terminal_tf"] == "total" else "secondary", use_container_width=True):
+            st.session_state["terminal_tf"] = "total"
+            st.rerun()
+    with tf_cols[1]:
+        if st.button("📅 Week 3 (Aug 24-28)", key="tf_w3", type="primary" if st.session_state["terminal_tf"] == "week_3" else "secondary", use_container_width=True):
+            st.session_state["terminal_tf"] = "week_3"
+            st.rerun()
+    with tf_cols[2]:
+        if st.button("📅 Week 2 (Aug 17-21)", key="tf_w2", type="primary" if st.session_state["terminal_tf"] == "week_2" else "secondary", use_container_width=True):
+            st.session_state["terminal_tf"] = "week_2"
+            st.rerun()
+    with tf_cols[3]:
+        if st.button("📅 Week 1 (Aug 12-14)", key="tf_w1", type="primary" if st.session_state["terminal_tf"] == "week_1" else "secondary", use_container_width=True):
+            st.session_state["terminal_tf"] = "week_1"
+            st.rerun()
+
+    # Active dataset
+    if st.session_state["terminal_tf"] == "total":
+        active_set = team_data["total"]
+    else:
+        active_set = next((w for w in team_data["weeks"] if w["week_id"] == st.session_state["terminal_tf"]), team_data["total"])
+
+    st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+
+    # 5-Column High-Density Wall Street Ticker Matrix
+    m_c1, m_c2, m_c3, m_c4, m_c5 = st.columns(5)
+    with m_c1:
+        st.markdown(f"""
+        <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem;">
+            <div class="metric-label">OUTREACH ATTEMPTS</div>
+            <div class="terminal-ticker" style="color:{TEXT_COLOR};">{active_set['attempts']:,}</div>
+            <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-amber">{active_set['avg_dials_day']} / day</span> avg pace</div>
+            <div style="font-size:0.75rem; color:{TEXT_MUTED}; margin-top:6px;">{active_set.get('companies_worked', 0)} companies worked</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with m_c2:
+        st.markdown(f"""
+        <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem;">
+            <div class="metric-label">CONTACTS REACHED</div>
+            <div class="terminal-ticker" style="color:{TEXT_COLOR};">{active_set['contacts_reached']:,}</div>
+            <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-blue">{active_set['contact_rate_pct']}%</span> pickup rate</div>
+            <div style="font-size:0.75rem; color:{TEXT_MUTED}; margin-top:6px;">{active_set.get('dead_dials', 0)} bad / dead dials</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with m_c3:
+        st.markdown(f"""
+        <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem;">
+            <div class="metric-label">LIVE CONVERSATIONS</div>
+            <div class="terminal-ticker" style="color:{TEXT_COLOR};">{active_set['live_interactions']:,}</div>
+            <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-green">{active_set['connect_to_conv_pct']}%</span> connect rate</div>
+            <div style="font-size:0.75rem; color:{TEXT_MUTED}; margin-top:6px;">Direct decision discussions</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with m_c4:
+        st.markdown(f"""
+        <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem;">
+            <div class="metric-label">EXPLICIT INTEREST</div>
+            <div class="terminal-ticker" style="color:{TEXT_COLOR};">{active_set['explicit_interest']:,}</div>
+            <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-green">{active_set['interest_rate_pct']}%</span> interest rate</div>
+            <div style="font-size:0.75rem; color:{TEXT_MUTED}; margin-top:6px;">{active_set.get('followups', 0)} scheduled follow-ups</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with m_c5:
+        st.markdown(f"""
+        <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem; border: 1.5px solid {ACCENT_COLOR};">
+            <div class="metric-label">MEETINGS BOOKED</div>
+            <div class="terminal-ticker" style="color:{ACCENT_COLOR};">{active_set['meetings_scheduled']}</div>
+            <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-amber">{active_set['dials_per_meeting']:,.0f} dials</span> / meeting</div>
+            <div style="font-size:0.75rem; font-weight:700; color:{TEXT_COLOR}; margin-top:6px;">${active_set['pipeline_value']:,.0f} Pipeline Value</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 2 Columns: Conversion Funnel & Weekly Velocity Comparison
+    f_c1, f_c2 = st.columns([1.4, 1.6])
+
+    with f_c1:
+        st.markdown(f"""
+        <div class="crm-card" style="padding: 1.25rem;">
+            <div style="font-family:'Playfair Display', serif; font-size:1.15rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom:0.25rem;">
+                Conversion Funnel & Efficiency
+            </div>
+            <div style="font-size:0.8rem; color:{TEXT_MUTED}; margin-bottom:1rem;">
+                Step-by-step conversion drop-off from dial to booked meeting ({active_set['title']}).
+            </div>
+
+            <div style="background:{INPUT_BG}; border-left:4px solid {TEXT_MUTED}; padding:10px 14px; border-radius:0 8px 8px 0; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="font-weight:600; font-size:0.85rem;">1. Outreach Dials Initiated</span>
+                    <span style="font-family:'JetBrains Mono', monospace; font-weight:700;">{active_set['attempts']:,}</span>
+                </div>
+                <div style="font-size:0.75rem; color:{TEXT_MUTED};">Base outbound volume</div>
+            </div>
+
+            <div style="background:{INPUT_BG}; border-left:4px solid #3B82F6; padding:10px 14px; border-radius:0 8px 8px 0; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="font-weight:600; font-size:0.85rem;">2. Contacts Reached</span>
+                    <span style="font-family:'JetBrains Mono', monospace; font-weight:700;">{active_set['contacts_reached']:,} ({active_set['contact_rate_pct']}%)</span>
+                </div>
+                <div style="font-size:0.75rem; color:{TEXT_MUTED};">Pickups vs dead / disconnected numbers</div>
+            </div>
+
+            <div style="background:{INPUT_BG}; border-left:4px solid #10B981; padding:10px 14px; border-radius:0 8px 8px 0; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="font-weight:600; font-size:0.85rem;">3. Live Conversations</span>
+                    <span style="font-family:'JetBrains Mono', monospace; font-weight:700;">{active_set['live_interactions']:,} ({active_set['connect_to_conv_pct']}%)</span>
+                </div>
+                <div style="font-size:0.75rem; color:{TEXT_MUTED};">Actual human sales conversations</div>
+            </div>
+
+            <div style="background:{INPUT_BG}; border-left:4px solid #F59E0B; padding:10px 14px; border-radius:0 8px 8px 0; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="font-weight:600; font-size:0.85rem;">4. Explicit Interest Expressed</span>
+                    <span style="font-family:'JetBrains Mono', monospace; font-weight:700;">{active_set['explicit_interest']:,} ({active_set['interest_rate_pct']}%)</span>
+                </div>
+                <div style="font-size:0.75rem; color:{TEXT_MUTED};">Positive buyer feedback / request for follow-up</div>
+            </div>
+
+            <div style="background:{INPUT_BG}; border-left:4px solid {ACCENT_COLOR}; padding:10px 14px; border-radius:0 8px 8px 0;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="font-weight:700; font-size:0.9rem; color:{ACCENT_COLOR};">5. Qualified Meetings Booked</span>
+                    <span style="font-family:'JetBrains Mono', monospace; font-weight:800; font-size:1rem; color:{ACCENT_COLOR};">{active_set['meetings_scheduled']}</span>
+                </div>
+                <div style="font-size:0.75rem; color:{TEXT_MUTED};">Conversion: 1 booked meeting every {active_set['dials_per_meeting']:,.0f} dials</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with f_c2:
+        st.markdown(f"""
+        <div class="crm-card" style="padding: 1.25rem;">
+            <div style="font-family:'Playfair Display', serif; font-size:1.15rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom:0.25rem;">
+                Weekly Velocity & Sprint Momentum
+            </div>
+            <div style="font-size:0.8rem; color:{TEXT_MUTED}; margin-bottom:1rem;">
+                Sprint-over-sprint tracking across all 3 weeks of team execution.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        for w in team_data["weeks"]:
+            with st.expander(f"📅 **{w['title']} ({w['dates']})** — {w['attempts']:,} Dials · {w['live_interactions']} Live Calls · **{w['meetings_scheduled']} Meetings**", expanded=(w["week_id"] == "week_3")):
+                wc1, wc2, wc3, wc4 = st.columns(4)
+                with wc1:
+                    st.metric("Dials / Day", f"{w['avg_dials_day']}", f"{w['working_days']} days worked")
+                with wc2:
+                    st.metric("Live Connects", f"{w['live_interactions']}", f"{w['connect_to_conv_pct']}% of reached")
+                with wc3:
+                    st.metric("Explicit Interest", f"{w['explicit_interest']}", f"{w['followups']} follow-ups")
+                with wc4:
+                    st.metric("Meetings Booked", f"{w['meetings_scheduled']}", f"${w['pipeline_value']:,.0f} val")
+
+        # Telephony & Call Outcome Breakdown Card
+        st.markdown(f"""
+        <div class="crm-card" style="padding: 1.25rem; margin-top: 1rem;">
+            <div style="font-family:'Playfair Display', serif; font-size:1.05rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom:0.25rem;">
+                Telephony & Call Friction Analysis
+            </div>
+            <div style="font-size:0.8rem; color:{TEXT_MUTED}; margin-bottom:0.75rem;">
+                Breakdown of where dials landed during this sprint.
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div style="padding:8px 12px; background:{INPUT_BG}; border-radius:6px;">
+                    <div style="font-size:0.75rem; color:{TEXT_MUTED};">VOICEMAILS LEFT</div>
+                    <div style="font-family:'JetBrains Mono', monospace; font-weight:700; font-size:1.1rem;">{active_set.get('voicemails', 0):,}</div>
+                </div>
+                <div style="padding:8px 12px; background:{INPUT_BG}; border-radius:6px;">
+                    <div style="font-size:0.75rem; color:{TEXT_MUTED};">GATEKEEPERS & RECEPTION</div>
+                    <div style="font-family:'JetBrains Mono', monospace; font-weight:700; font-size:1.1rem;">{active_set.get('gatekeeper', 0):,}</div>
+                </div>
+                <div style="padding:8px 12px; background:{INPUT_BG}; border-radius:6px;">
+                    <div style="font-size:0.75rem; color:{TEXT_MUTED};">DEAD DIALS (DISCONNECTED/BAD)</div>
+                    <div style="font-family:'JetBrains Mono', monospace; font-weight:700; font-size:1.1rem;">{active_set.get('dead_dials', 0):,}</div>
+                </div>
+                <div style="padding:8px 12px; background:{INPUT_BG}; border-radius:6px;">
+                    <div style="font-size:0.75rem; color:{TEXT_MUTED};">NOT INTERESTED / DNC</div>
+                    <div style="font-family:'JetBrains Mono', monospace; font-weight:700; font-size:1.1rem;">{active_set.get('not_interested', 0):,} <span style="font-size:0.7rem; color:#10B981;">(Low 1.5% drop)</span></div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Google Sheets Connection Settings
+    with st.expander("⚙️ **Google Sheets Live Ingestion Settings**"):
+        st.markdown(f"**Connected Source Spreadsheet:** [{st.session_state['sheet_url']}]({st.session_state['sheet_url']})")
+        new_url = st.text_input("Change Google Sheets URL", value=st.session_state["sheet_url"], key="custom_sheet_url_input")
+        if st.button("💾 Save Sheet URL & Re-sync", key="save_sheet_url_btn", type="primary"):
+            st.session_state["sheet_url"] = new_url.strip()
+            st.success("Updated Google Sheet URL! Synchronizing now...")
+            st.rerun()
 
 
 # ---------------------------------------------------------------------------
