@@ -705,19 +705,13 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Top Action Bar & Date Banner
 # ---------------------------------------------------------------------------
-top_col1, top_col2, top_col3 = st.columns([2.5, 3.5, 1.5])
+search_query = ""
+top_col1, top_col2 = st.columns([5, 1.5])
 
 with top_col1:
     st.caption(f"WORKSPACE / **{st.session_state['active_tab'].upper()}**")
 
 with top_col2:
-    search_query = st.text_input(
-        "Search",
-        placeholder="🔍 Search company, contact, or email...",
-        label_visibility="collapsed",
-    )
-
-with top_col3:
     with st.popover("➕ Add a Lead", use_container_width=True):
         st.markdown("### ➕ Add New Opportunity")
         with st.form("manual_lead_form"):
@@ -1081,8 +1075,8 @@ if st.session_state["active_tab"] == "Today":
         f"""
         <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 1.25rem;">
             <div>
-                <div class="hero-heading">Good morning, Bilal.</div>
-                <div class="subtitle">Here's the shape of the studio today.</div>
+                <div class="hero-heading">Road to Million Dollar $$$</div>
+                <div class="subtitle">Wall Street outbound velocity · High-ticket 3D deals & pipeline domination.</div>
             </div>
         </div>
         """,
