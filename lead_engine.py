@@ -17,17 +17,11 @@ from datetime import datetime
 
 import db
 import agent_core
+import scraper
 
 
 def get_apollo_key():
-    key = os.environ.get("APOLLO_API_KEY")
-    if not key:
-        try:
-            import streamlit as st
-            key = st.secrets.get("APOLLO_API_KEY")
-        except Exception:
-            pass
-    return key
+    return agent_core._secret("APOLLO_API_KEY")
 
 
 def scrub_and_format_phone(raw_phone: str) -> dict:
@@ -253,13 +247,68 @@ def parse_and_enrich_csv(csv_content: str, max_records: int = 300) -> dict:
     }
 
 
-def synthesize_lead_battlecards(leads_list: list, progress_callback=None) -> list:
+def _slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (text or "lead").lower()).strip("-")[:60] or "lead"
+
+
+def synthesize_lead_battlecards(leads_list: list, progress_callback=None, enrich: bool = False, scrape: bool = False) -> list:
+    """
+    Pairs each lead with a Gemini cold-call battlecard. Optionally:
+    - scrape=True : run the Playwright site scan (scraper.check_configurator) to detect
+      existing 3D/visualization tech, product title/description and a screenshot.
+    - enrich=True : run SignalHire enrichment (agent_core.enrich_lead), but only for leads
+      still missing an email or phone, to bound API-credit spend on large batches.
+    """
     total = len(leads_list)
     enriched = []
 
     for idx, lead in enumerate(leads_list):
         if progress_callback:
             progress_callback(idx + 1, total, lead["company_name"])
+
+        site_note = ""  # must reset per lead — otherwise it leaks to the next one
+
+        if scrape and lead.get("company_website"):
+            try:
+                sc = scraper.scan_site(
+                    lead["company_website"],
+                    screenshot_path=f"screenshots/{_slugify(lead['company_name'])}.png",
+                )
+            except Exception:
+                sc = {}
+            lead["has_3d"] = 1 if sc.get("has_3d") else 0
+            lead["matched_signals"] = ", ".join(sc.get("matched_signals", []) or [])
+            lead["product_title"] = sc.get("product_title", "")
+            lead["product_description"] = sc.get("product_description", "")
+            lead["screenshot_path"] = sc.get("screenshot_path", "")
+            if not sc.get("error"):
+                verdict, why = agent_core.site_matches_lead(
+                    lead.get("company_name", ""),
+                    lead.get("industry_tag", ""),
+                    f"{sc.get('product_title','')} {sc.get('product_description','')}",
+                    blocked=bool(sc.get("blocked")),
+                )
+                lead["site_verdict"] = verdict
+                # Held aside and prepended to the battlecard reason below, so the
+                # AI-written "how we help" text is never lost.
+                if verdict == "blocked":
+                    pass  # site refused the scanner — proves nothing, leave the lead alone
+                elif verdict == "mismatch":
+                    lead["lead_score"] = 20
+                    site_note = (
+                        f"⚠️ UNVERIFIED — {lead.get('company_website','the listed site')} does not match this company "
+                        f"({why}). Confirm the business exists before outreach."
+                    )
+                elif not sc.get("has_3d"):
+                    site_note = "No interactive 3D on their site yet — strong fit for an Elipse configurator / 3D visualization."
+
+        if enrich:
+            cur_email = (lead.get("contact_email") or "").strip().lower()
+            if cur_email in ("", "unknown") or not (lead.get("contact_phone") or "").strip():
+                try:
+                    lead = agent_core.enrich_lead(lead)
+                except Exception:
+                    pass
 
         battlecard = agent_core.generate_cold_call_battlecard(
             company_name=lead["company_name"],
@@ -269,7 +318,11 @@ def synthesize_lead_battlecards(leads_list: list, progress_callback=None) -> lis
             industry_tag=lead.get("industry_tag", "⚡ Tech & Commercial Products"),
         )
 
-        lead["reason"] = battlecard.get("how_we_help", "High customization product catalog that converts higher with interactive real-time 3D web builder.")
+        base_reason = lead.get("reason") or battlecard.get(
+            "how_we_help",
+            "High customization product catalog that converts higher with interactive real-time 3D web builder.",
+        )
+        lead["reason"] = f"{site_note} {base_reason}".strip() if site_note else base_reason
         lead["phone_script"] = battlecard.get("phone_script", "")
         lead["objection_notes"] = battlecard.get("objection_matrix", "")
         lead["subject"] = f"3D configurator concept for {lead['company_name']}"

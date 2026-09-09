@@ -1,76 +1,129 @@
-# 🎯 Elipse Studio — AI Outreach Agent & Lead Dashboard
+# 🎯 Elipse Studio — AI Outreach Agent & Lead CRM
 
-An automated AI outreach system that researches physical and configurable product businesses, identifies companies lacking interactive 3D web configurators, enriches contact details, drafts personalized cold emails, and manages the outreach pipeline.
-
----
-
-## ⚡ Features
-
-- **🧠 Google Gemini 3.6 Flash Agent:** Generates targeted search strategies and drafts hyper-personalized cold outreach emails.
-- **🌐 Live Web Research:** Searches the web in real-time to find target companies and observe product catalogs.
-- **🎯 Contact Enrichment:** Integrates with Hunter.io to discover verified sales/founder emails.
-- **💾 Persistent SQLite Database:** Tracks leads across statuses (`new`, `approved`, `sent`, `rejected`) and prevents duplicate outreach.
-- **📊 Interactive Streamlit Dashboard:**
-  - Real-time pipeline metrics and status filtering.
-  - In-browser draft editing & approval workflow.
-  - **1-Click Mailto Trigger:** Opens your pre-filled email draft directly in Outlook/Gmail/Apple Mail.
-  - **CSV Export:** Download qualified leads for email campaigns or CRM import.
+A Streamlit sales CRM for **Elipse Studio** (3D configurators, CGI, 3D visualisation, VR/AR).
+It discovers prospect companies with AI, enriches their contacts, scans their websites with a
+real browser to check whether they already have 3D tech, and produces cold-call battlecards and
+email drafts — all tracked in a local SQLite pipeline.
 
 ---
 
-## 🚀 Getting Started (Local Setup)
+## ⚡ What It Does
 
-### 1. Clone the repository & Install Dependencies
+| Module | Role |
+|---|---|
+| `app.py` | Streamlit UI — 8 tabs (Today, Sales Terminal, Cold Call Desk, Problem Desk, Pipeline, Contacts, Follow-ups, AI Lead Finder) |
+| `agent_core.py` | Gemini agent (multi-model cascade), Hunter.io + SignalHire enrichment, battlecard generation, site/lead match verification |
+| `scraper.py` | **Playwright site scanner** — detects existing 3D tech, grabs product intel, screenshots the page |
+| `lead_engine.py` | Apollo.io API, CSV importer with column auto-mapping, phone scrubbing |
+| `db.py` | SQLite CRM — leads, pipeline stages, sales problems, migrations |
+| `team_analytics.py` | Pulls outbound call stats from a Google Sheet (with cached fallback) |
+
+### Lead discovery (`AI Lead Finder` / `Cold Call Desk → Free AI Web Discovery`)
+1. You describe your ICP → Gemini returns N companies (**slider: 5–25 per run**)
+2. Website verified/resolved via DuckDuckGo
+3. Duplicates skipped, Hunter.io + SignalHire enrichment applied
+4. Gemini writes a 20-second cold-call script + objection rebuttals + email draft
+5. Saved to SQLite
+
+### Bulk import
+Drag-and-drop CSV from **Apollo / ZoomInfo / Clay / Sales Navigator** — columns auto-mapped, phone
+numbers normalised, switchboards flagged. Optional checkboxes for site-scanning and deep enrichment.
+
+---
+
+## 🕷️ The Site Scanner (`scraper.py`)
+
+Runs in a **separate process** (Playwright's sync API cannot launch a browser from Streamlit's
+worker thread — on Windows that raises `NotImplementedError`).
+
+**Pipeline:** headless Chromium (1366×900, real UA) → `domcontentloaded` → `load` → `networkidle`
+→ scroll down/up (triggers lazy-loading) → 3s settle → read + screenshot.
+
+**Returns:**
+
+| Field | Meaning |
+|---|---|
+| `has_3d` | Site already shows interactive 3D tech |
+| `matched_signals` | **STRONG** hits: `3d configurator`, `webgl`, `three.js`, `3d viewer`, `360 view`, `virtual tour`, `augmented reality`, `cgi animation` |
+| `weak_signals` | **WEAK** mentions that prove nothing: `customize`, `build your own`, `3d model`, `cgi` |
+| `product_title` / `product_description` | From `og:title`/`h1`/`title` and `meta description`/`og:description`/`<p>` |
+| `screenshot_path` | Viewport PNG in `screenshots/` |
+| `http_status`, `blocked` | Detects 403 / Cloudflare / captcha refusals |
+| `error` | Never raises — failures return the same shape with `error` set |
+
+**Lead verification.** `agent_core.site_matches_lead()` compares the scraped text against the
+company name and its industry keywords and returns one of:
+
+- **match** — page mentions the company or its industry ✅
+- **mismatch** — page is about something else → 🚫 *AI most likely hallucinated this lead*
+- **blocked** — the site refused the scanner → 🛡️ *proves nothing; check manually*
+- **unknown** — too little text to judge
+
+**Where it runs:** the 🔍 *Scan site* button on any lead card · optional checkbox during CSV/Apollo
+import · CLI. It does **not** run automatically during AI discovery.
+
+```bash
+python -m scraper https://example.com                    # default
+python -m scraper https://example.com shot.png 20000 5000  # url, path, nav timeout, settle ms
+```
+
+---
+
+## 🚀 Local Setup
+
 ```bash
 git clone <your-repo-url>
-cd outreach_system
+cd elipse-outreach-agent
 pip install -r requirements.txt
+playwright install chromium          # required for the site scanner
+streamlit run app.py                 # http://localhost:8501
 ```
 
-### 2. Configure Environment Variables
-Create a `.env` file in the root directory (or copy from `.env.example`):
+### `.env` (copy from `.env.example`)
+
 ```env
-# Required: Google Gemini API Key
-GEMINI_API_KEY=your_gemini_api_key_here
-
-# Optional: Hunter.io API Key for decision-maker email lookups
-HUNTER_API_KEY=your_hunter_api_key_here
-
-# Optional: Your Calendly / booking URL
-CALENDAR_LINK=https://calendly.com/your-name/15-mins-meeting
+GEMINI_API_KEY=your_gemini_api_key_here        # required
+HUNTER_API_KEY=your_hunter_api_key_here        # emails/phones — strongly recommended
+SIGNALHIRE_API_KEY=your_signalhire_api_key     # optional, limited (see below)
+APOLLO_API_KEY=your_apollo_api_key             # optional, paid plans only
+CALENDAR_LINK=https://calendly.com/you/15-mins
 ```
 
-### 3. Launch the Dashboard
-```bash
-streamlit run app.py
-```
-This opens the dashboard at `http://localhost:8501`.
+> Set **only one** of `GEMINI_API_KEY` / `GOOGLE_API_KEY` — the app normalises to `GEMINI_API_KEY`
+> at startup, but a stale second key in your OS environment causes confusion.
 
 ---
 
-## ☁️ Deploying to the Cloud (Free & Easy)
+## ⚠️ Known Limitations
 
-### Option 1: Streamlit Community Cloud (Recommended)
-1. Push your repository to **GitHub**:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit of Elipse Outreach System"
-   git branch -M main
-   git remote add origin https://github.com/<your-username>/<your-repo-name>.git
-   git push -u origin main
-   ```
-2. Go to [share.streamlit.io](https://share.streamlit.io/) and sign in with GitHub.
-3. Click **"New App"** and select your repository and `app.py`.
-4. Under **"Advanced Settings" $\rightarrow$ "Secrets"**, paste your `.env` variables:
+| Item | Status |
+|---|---|
+| **SignalHire email/phone reveal** | ❌ Not wired. SignalHire's Person API is **callback-only** — it POSTs results to a public HTTPS URL you must host. Only its synchronous `searchByQuery` (job-title verification, no contacts) is used, and it is rate-limited on small plans. |
+| **AI hallucination** | ⚠️ Gemini sometimes invents companies and attaches unrelated live domains. The site scanner catches this (**mismatch** verdict) — **always scan an AI lead before calling or emailing.** |
+| **Playwright on Streamlit Cloud** | ❌ No runtime browser install. Scans work locally; on Cloud they fail gracefully with an `error`. A Docker host (`playwright install --with-deps chromium`) is the fix. |
+| **Bot-protected sites** | Some sites 403 everything non-browser. Reported as **blocked** — not a bad lead. |
+| **SQLite persistence** | `leads.db` is local and gitignored. On Streamlit Cloud it is **ephemeral** — use Postgres/Supabase for real multi-user use. |
+| **Apollo free plan** | Blocks REST API (403). Use the CSV tab instead. |
+| **Gemini free tier** | ~20 requests/day. Each lead costs ~1 extra call, so runs above ~12 leads can exhaust the daily quota. |
+
+---
+
+## ☁️ Deploying to Streamlit Community Cloud
+
+1. Push to GitHub, then create the app at [share.streamlit.io](https://share.streamlit.io/) pointing at `app.py`.
+2. Add your keys under **Advanced Settings → Secrets** (TOML):
    ```toml
-   GEMINI_API_KEY = "your_actual_key"
-   HUNTER_API_KEY = "your_actual_key"
-   CALENDAR_LINK = "https://calendly.com/your-name/15-mins-meeting"
+   GEMINI_API_KEY = "..."
+   HUNTER_API_KEY = "..."
+   SIGNALHIRE_API_KEY = "..."
+   CALENDAR_LINK = "https://calendly.com/you/15-mins"
    ```
-5. Click **Deploy**! Your app is now live on the web with a public URL.
+3. `packages.txt` ships the apt libraries headless Chromium needs. The **browser binary itself is
+   not installed at runtime**, so site scanning is disabled on Cloud (everything else works).
 
 ---
 
 ## 🔒 Security
-- `.env`, `leads.db`, and temporary files are strictly ignored via `.gitignore` to prevent any credential leaks.
+
+`.env`, `leads.db`, `screenshots/` and `product.png` are gitignored. Keep real API keys in `.env`
+(or Streamlit Secrets) — **never** in `.env.example`, which is committed.

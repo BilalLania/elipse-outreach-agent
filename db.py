@@ -90,6 +90,13 @@ def init_db():
             "objection_notes": "TEXT",
             "phone_status": "TEXT DEFAULT 'verified_direct'",
             "lead_score": "INTEGER DEFAULT 90",
+            "has_3d": "INTEGER DEFAULT 0",
+            "matched_signals": "TEXT",
+            "product_title": "TEXT",
+            "product_description": "TEXT",
+            "screenshot_path": "TEXT",
+            "enrichment_source": "TEXT",
+            "enriched_at": "TEXT",
         }
 
         for col, col_type in column_defs.items():
@@ -430,6 +437,13 @@ def add_lead(
     objection_notes="",
     phone_status="verified_direct",
     lead_score=90,
+    has_3d=0,
+    matched_signals="",
+    product_title="",
+    product_description="",
+    screenshot_path="",
+    enrichment_source="",
+    enriched_at="",
 ):
     now = datetime.now().isoformat(timespec="seconds")
     if not followup_date:
@@ -442,8 +456,11 @@ def add_lead(
                 contact_phone, contact_linkedin, industry_tag, deal_value, pipeline_stage,
                 status, reason, subject, body, notes, followup_date, source_prompt,
                 phone_script, objection_notes, phone_status, lead_score,
+                has_3d, matched_signals, product_title, product_description, screenshot_path,
+                enrichment_source, enriched_at,
                 created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 company_name,
                 company_website,
@@ -465,6 +482,13 @@ def add_lead(
                 objection_notes,
                 phone_status,
                 lead_score,
+                int(has_3d or 0),
+                matched_signals,
+                product_title,
+                product_description,
+                screenshot_path,
+                enrichment_source,
+                enriched_at,
                 now,
                 now,
             ),
@@ -477,22 +501,31 @@ def batch_add_leads(leads_list):
     now = datetime.now().isoformat(timespec="seconds")
     today_str = date.today().isoformat()
     inserted_count = 0
+    seen_in_batch = set()
 
     with get_conn() as conn:
         for lead in leads_list:
             comp = lead.get("company_name", "").strip()
-            if not comp or is_duplicate(comp):
+            comp_key = comp.lower()
+            if not comp or comp_key in seen_in_batch or is_duplicate(comp):
                 continue
+            seen_in_batch.add(comp_key)
 
             fu_date = lead.get("followup_date") or today_str
+            _ms = lead.get("matched_signals", "")
+            if isinstance(_ms, (list, tuple)):
+                _ms = ", ".join(str(s) for s in _ms)
             conn.execute(
                 """INSERT INTO leads
                    (company_name, company_website, contact_name, contact_role, contact_email,
                     contact_phone, contact_linkedin, industry_tag, deal_value, pipeline_stage,
                     status, reason, subject, body, notes, followup_date, source_prompt,
                     phone_script, objection_notes, phone_status, lead_score,
+                    has_3d, matched_signals, product_title, product_description, screenshot_path,
+                    enrichment_source, enriched_at,
                     created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                           ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     comp,
                     lead.get("company_website", "").strip(),
@@ -514,6 +547,13 @@ def batch_add_leads(leads_list):
                     lead.get("objection_notes", "").strip(),
                     lead.get("phone_status", "verified_direct"),
                     int(lead.get("lead_score") or 90),
+                    int(lead.get("has_3d") or 0),
+                    _ms,
+                    lead.get("product_title", "").strip(),
+                    lead.get("product_description", "").strip(),
+                    lead.get("screenshot_path", "").strip(),
+                    lead.get("enrichment_source", "").strip(),
+                    lead.get("enriched_at", "").strip(),
                     now,
                     now,
                 ),

@@ -53,21 +53,29 @@ def clean_html(html_str: str) -> str:
 
 load_dotenv()
 
-# Bridge Streamlit Cloud secrets to environment variables if present
-try:
-    if hasattr(st, "secrets"):
-        for key, val in st.secrets.items():
-            if isinstance(val, str) and not os.environ.get(key):
-                os.environ[key] = val
-except Exception:
-    pass
-
+# set_page_config MUST be the first Streamlit command executed on the page.
 st.set_page_config(
     page_title="elipse / studio — CRM",
     page_icon="⬭",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Bridge Streamlit Cloud secrets -> environment variables. Only touch st.secrets when
+# a secrets.toml actually exists, so local runs without one don't log "No secrets found".
+import pathlib as _pathlib
+
+_secrets_paths = [
+    _pathlib.Path.home() / ".streamlit" / "secrets.toml",
+    _pathlib.Path(".streamlit") / "secrets.toml",
+]
+if any(p.exists() for p in _secrets_paths):
+    try:
+        for _k, _v in st.secrets.items():
+            if isinstance(_v, str) and not os.environ.get(_k):
+                os.environ[_k] = _v
+    except Exception:
+        pass
 
 db.init_db()
 
@@ -729,6 +737,19 @@ with st.sidebar:
     else:
         st.caption("⚪ **Hunter.io:** Not configured")
 
+    s_key = os.environ.get("SIGNALHIRE_API_KEY")
+    if s_key:
+        st.caption("🟢 **SignalHire:** Connected")
+    else:
+        st.caption("⚪ **SignalHire:** Not configured")
+
+    try:
+        import scraper as _scraper_probe
+        _pw_ready = _scraper_probe.sync_playwright is not None
+    except Exception:
+        _pw_ready = False
+    st.caption("🟢 **Playwright:** Ready" if _pw_ready else "⚪ **Playwright:** Not installed")
+
     cal_link = agent_core.get_calendar_link()
     st.caption(f"📅 **Calendar:** `{cal_link[:26]}...`")
 
@@ -888,6 +909,135 @@ def render_hunter_decision_makers_ui(lead, key_prefix="today"):
                     del st.session_state[f"dms_{lead_id}"]
                     st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_site_scan_ui(lead, key_prefix="today"):
+    """
+    Per-lead Playwright site scan (detect existing 3D / visualization tech, product
+    intel, screenshot) plus a combined Hunter.io + SignalHire deep-enrich button.
+    Runs on demand only — both operations are slow and metered.
+    """
+    import scraper
+
+    lead_id = lead["id"]
+    comp_name = lead.get("company_name", "")
+    website = lead.get("company_website") or ""
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        if st.button("🔍 Scan site (3D / product intel)", key=f"btn_scan_{key_prefix}_{lead_id}", use_container_width=True):
+            if not website:
+                st.warning("No website on this lead to scan.")
+            else:
+                with st.spinner(f"Playwright is scanning {comp_name}'s website..."):
+                    slug = "".join(ch if ch.isalnum() else "-" for ch in comp_name.lower())[:60] or f"lead-{lead_id}"
+                    res = scraper.scan_site(website, screenshot_path=f"screenshots/{slug}.png")
+                db.update_lead(
+                    lead_id,
+                    has_3d=1 if res.get("has_3d") else 0,
+                    matched_signals=", ".join(res.get("matched_signals", []) or []),
+                    product_title=res.get("product_title", ""),
+                    product_description=res.get("product_description", ""),
+                    screenshot_path=res.get("screenshot_path", ""),
+                )
+                st.session_state[f"scan_{lead_id}"] = res
+                st.rerun()
+
+    with col_b:
+        if st.button("✨ Deep enrich (Hunter + SignalHire)", key=f"btn_enrich_{key_prefix}_{lead_id}", use_container_width=True):
+            with st.spinner(f"Enriching {comp_name} via Hunter.io + SignalHire..."):
+                merged = dict(lead)
+                # Hunter.io top decision maker (only fills gaps)
+                try:
+                    dms = agent_core.get_top_decision_makers(website or comp_name, limit=1)
+                except Exception:
+                    dms = []
+                if dms:
+                    dm = dms[0]
+                    if (merged.get("contact_email") or "").strip().lower() in ("", "unknown") and dm.get("email"):
+                        merged["contact_email"] = dm["email"]
+                    if not (merged.get("contact_name") or "").strip() and dm.get("name"):
+                        merged["contact_name"] = dm["name"]
+                    if not (merged.get("contact_role") or "").strip() and dm.get("position"):
+                        merged["contact_role"] = dm["position"]
+                    if not (merged.get("contact_linkedin") or "").strip() and dm.get("linkedin_url"):
+                        merged["contact_linkedin"] = dm["linkedin_url"]
+                    merged["enrichment_source"] = "hunter"
+                # SignalHire (async poll, additive merge)
+                try:
+                    merged = agent_core.enrich_lead(merged)
+                except Exception:
+                    pass
+            db.update_lead(
+                lead_id,
+                contact_name=merged.get("contact_name") or lead.get("contact_name"),
+                contact_role=merged.get("contact_role") or lead.get("contact_role"),
+                contact_email=merged.get("contact_email") or lead.get("contact_email"),
+                contact_phone=merged.get("contact_phone") or lead.get("contact_phone"),
+                contact_linkedin=merged.get("contact_linkedin") or lead.get("contact_linkedin"),
+                enrichment_source=merged.get("enrichment_source") or lead.get("enrichment_source") or "",
+                enriched_at=merged.get("enriched_at") or "",
+            )
+            st.success("Enrichment complete.")
+            st.rerun()
+
+    res = st.session_state.get(f"scan_{lead_id}")
+    if not res and (lead.get("matched_signals") or lead.get("product_title") or lead.get("screenshot_path")):
+        res = {
+            "has_3d": bool(lead.get("has_3d")),
+            "matched_signals": [s.strip() for s in (lead.get("matched_signals") or "").split(",") if s.strip()],
+            "product_title": lead.get("product_title", ""),
+            "product_description": lead.get("product_description", ""),
+            "screenshot_path": lead.get("screenshot_path", ""),
+            "error": "",
+        }
+    if res:
+        if res.get("error"):
+            st.caption(f"⚠️ Scan issue: {res['error']}")
+
+        # Does the scraped page actually belong to this company? Catches hallucinated leads.
+        verdict, why = agent_core.site_matches_lead(
+            comp_name,
+            lead.get("industry_tag", ""),
+            f"{res.get('product_title','')} {res.get('product_description','')}",
+            blocked=bool(res.get("blocked")),
+        )
+
+        if verdict == "blocked":
+            status = res.get("http_status") or ""
+            st.warning(
+                f"🛡️ **Site blocked the scanner{f' (HTTP {status})' if status else ''}** — {why}. "
+                f"This says **nothing** about whether the lead is good; many real sites block bots. "
+                f"Open [{website}]({website}) yourself to check."
+            )
+        elif verdict == "mismatch":
+            st.error(
+                f"🚫 **This website does not match the lead.** `{website}` reads as something else entirely "
+                f"({why}). The company name/contact were most likely invented by the AI — **verify before calling or emailing.**"
+            )
+        else:
+            if res.get("has_3d"):
+                st.markdown(f"**Site 3D signals:** `{', '.join(res.get('matched_signals', []))}` — already has interactive tech.")
+            elif verdict == "unknown":
+                st.markdown("**Site 3D signals:** none found — but the page returned almost no readable text, so treat this as unverified.")
+            else:
+                st.markdown("**Site 3D signals:** none found — 🔥 strong fit for an Elipse configurator / 3D visualization.")
+            if res.get("weak_signals"):
+                st.caption(f"Mentions (not confirmed 3D): {', '.join(res['weak_signals'])}")
+        if res.get("product_title") and len(str(res["product_title"]).strip()) > 3:
+            st.markdown(f"**Product:** {res['product_title']}")
+        if res.get("product_description") and len(str(res["product_description"]).strip()) > 12:
+            st.caption(res["product_description"])
+        sp = res.get("screenshot_path")
+        if sp and os.path.exists(sp):
+            # NOTE: a checkbox, not an expander — these cards already live inside an
+            # expander on the Today / Pipeline / Contacts tabs, and Streamlit forbids nesting.
+            if st.checkbox("🖼️ Show site screenshot", key=f"showss_{key_prefix}_{lead_id}"):
+                try:
+                    st.image(sp, width=420)
+                except Exception:
+                    st.caption(f"Screenshot saved: {sp}")
 
 
 def render_sales_problems_ui(key_prefix: str = "today", default_expanded: bool = False):
@@ -1250,6 +1400,7 @@ if st.session_state["active_tab"] == "Today":
                     render_linkedin_research_and_reveal_ui(lead, key_prefix=f"today_{lead['id']}")
 
                     render_hunter_decision_makers_ui(lead, key_prefix="today")
+                    render_site_scan_ui(lead, key_prefix="today")
                     st.markdown(f"**Fit Observation:** {lead.get('reason')}")
                     st.markdown(f"**Subject:** {lead.get('subject')}")
                     st.text_area("Draft Body", lead.get("body", ""), height=130, key=f"today_body_{lead['id']}")
@@ -1526,9 +1677,11 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                 value="US companies that are B Tier companies doing around 1M to 10M in profits and would be interested in Interactive 3D Configurators",
                 key="free_icp_search_query",
             )
+            free_lead_n = st.slider("Leads to discover this run", 5, 25, 8, key="free_ai_count")
+            st.caption("Each lead ≈ 1 extra Gemini call. Runs above ~12 can exhaust the free Gemini daily quota (~20/day) and take several minutes.")
             if st.button("🚀 Discover & Generate Calling Battlecards (Free)", key="btn_free_ai_discover", type="primary"):
-                with st.spinner("AI is searching Google, verifying official websites, and generating custom cold-call battlecards..."):
-                    res = agent_core.run_agent(free_prompt.strip(), log=lambda m: None)
+                with st.spinner(f"AI is searching Google, verifying official websites, and generating up to {free_lead_n} custom cold-call battlecards..."):
+                    res = agent_core.run_agent(free_prompt.strip(), log=lambda m: None, max_leads=free_lead_n)
                 if res.get("saved", 0) > 0:
                     st.success(f"🎉 Generated and added {res['saved']} qualified call-ready leads with scripts to your Cold Call Desk!")
                     st.rerun()
@@ -1559,6 +1712,12 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                 help="Get your key from Apollo.io -> Settings -> API Keys (Requires paid Apollo plan)",
             )
 
+            ap_o1, ap_o2 = st.columns(2)
+            with ap_o1:
+                ap_scrape = st.checkbox("🔍 Scan each site with Playwright", value=False, key="apollo_scrape_opt", help="Slower: visits every company's website to detect existing 3D tech + capture a screenshot.")
+            with ap_o2:
+                ap_enrich = st.checkbox("✨ Deep-enrich with SignalHire", value=False, key="apollo_enrich_opt", help="Only runs for leads still missing an email or phone. Consumes SignalHire credits.")
+
             if st.button("🚀 Fetch & Enrich Batch from Apollo", key="btn_fetch_apollo", type="primary"):
                 with st.spinner(f"Querying Apollo for verified executives matching '{icp_query}'..."):
                     result = lead_engine.query_apollo_leads(icp_query, limit=batch_limit, api_key=ap_key_input.strip() or None)
@@ -1573,7 +1732,7 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     def update_prog(cur, tot, name):
                         prog_bar.progress(cur / tot, text=f"Analyzing {name} ({cur}/{tot})...")
 
-                    enriched_leads = lead_engine.synthesize_lead_battlecards(fetched_leads, progress_callback=update_prog)
+                    enriched_leads = lead_engine.synthesize_lead_battlecards(fetched_leads, progress_callback=update_prog, enrich=ap_enrich, scrape=ap_scrape)
                     inserted = db.batch_add_leads(enriched_leads)
                     st.success(f"🎉 Successfully added {inserted} verified, call-ready leads to your Cold Call Desk!")
                     st.rerun()
@@ -1592,12 +1751,18 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     leads_to_add = parsed_res.get("leads", [])
                     st.info(f"Detected {len(leads_to_add)} unique leads in CSV (skipped {parsed_res.get('skipped_duplicates', 0)} duplicates already in CRM).")
 
+                    csv_o1, csv_o2 = st.columns(2)
+                    with csv_o1:
+                        csv_scrape = st.checkbox("🔍 Scan each site with Playwright", value=False, key="csv_scrape_opt", help="Slower: visits every company's website to detect existing 3D tech + capture a screenshot.")
+                    with csv_o2:
+                        csv_enrich = st.checkbox("✨ Deep-enrich with SignalHire", value=False, key="csv_enrich_opt", help="Only runs for leads still missing an email or phone. Consumes SignalHire credits.")
+
                     if st.button(f"⚡ Scrub Phones & Generate Battlecards ({len(leads_to_add)} Leads)", key="btn_process_csv", type="primary"):
                         prog_bar = st.progress(0)
                         def update_csv_prog(cur, tot, name):
                             prog_bar.progress(cur / tot, text=f"Writing 20-second script for {name} ({cur}/{tot})...")
 
-                        enriched = lead_engine.synthesize_lead_battlecards(leads_to_add, progress_callback=update_csv_prog)
+                        enriched = lead_engine.synthesize_lead_battlecards(leads_to_add, progress_callback=update_csv_prog, enrich=csv_enrich, scrape=csv_scrape)
                         inserted = db.batch_add_leads(enriched)
                         st.success(f"🎉 Successfully scrubbed and imported {inserted} call-ready leads!")
                         st.rerun()
@@ -1803,6 +1968,7 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                         st.markdown(" · ".join(ch_links))
 
                     render_hunter_decision_makers_ui(lead, key_prefix="cc_desk")
+                    render_site_scan_ui(lead, key_prefix="cc_desk")
 
                     # How We Can Help Box
                     st.markdown(clean_html(f"""
@@ -1824,7 +1990,7 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                         st.markdown(objection_text)
 
                     # Quick Rep Notes
-                    rep_call_note = st.text_input("Call Notes / Follow-up Details", placeholder="Spoke with receptionist, Hal returns at 3 PM...", key=f"cnote_{lead_id}")
+                    rep_call_note = st.text_input("Call Notes / Follow-up Details", placeholder="e.g. Left voicemail · gatekeeper screened · callback Tue 2 PM", key=f"cnote_{lead_id}")
 
                     # 1-Click Speed Dispositions Bar
                     st.markdown("<div style='font-size:0.75rem; font-weight:700; color:" + TEXT_MUTED + "; text-transform:uppercase; margin-bottom:6px; margin-top:8px;'>⚡ 1-Click Call Outcome Dispositions</div>", unsafe_allow_html=True)
@@ -1918,6 +2084,7 @@ elif st.session_state["active_tab"] == "Pipeline":
                     render_linkedin_research_and_reveal_ui(lead, key_prefix=f"pipe_{lead['id']}")
 
                     render_hunter_decision_makers_ui(lead, key_prefix="pipe")
+                    render_site_scan_ui(lead, key_prefix="pipe")
                     st.markdown(f"**Category:** `{cat_label}`")
                     st.markdown(f"**Angle:** {lead.get('reason')}")
 
@@ -2083,6 +2250,7 @@ elif st.session_state["active_tab"] == "Contacts":
                     render_linkedin_research_and_reveal_ui(lead, key_prefix=f"cnt_{lead['id']}")
 
                     render_hunter_decision_makers_ui(lead, key_prefix="contacts")
+                    render_site_scan_ui(lead, key_prefix="contacts")
                     if lead.get("reason"):
                         st.markdown(f"**Sales Angle:** {lead.get('reason')}")
 
@@ -2196,11 +2364,13 @@ elif st.session_state["active_tab"] == "AI Lead Finder":
             "What kind of businesses are you targeting?",
             placeholder="e.g. Find 5 luxury bespoke kitchen cabinet manufacturers in UAE or UK without a 3D configurator",
         )
+        lead_n = st.slider("Leads to discover this run", 5, 25, 8, key="ai_finder_count")
+        st.caption("Each lead ≈ 1 extra Gemini call. Runs above ~12 can exhaust the free Gemini daily quota (~20/day) and take several minutes.")
         submitted = st.form_submit_button("🚀 Discover & Draft Leads", type="primary")
 
     if submitted and prompt.strip():
-        with st.spinner("AI is researching and drafting personalized opportunities for Elipse Studio..."):
-            result = agent_core.run_agent(prompt.strip(), log=lambda m: None)
+        with st.spinner(f"AI is researching and drafting up to {lead_n} personalized opportunities for Elipse Studio..."):
+            result = agent_core.run_agent(prompt.strip(), log=lambda m: None, max_leads=lead_n)
 
         st.session_state["finder_search_msg"] = f"🎉 Successfully generated and added {result['saved']} new qualified lead(s) into your CRM!"
         if result.get("skipped_duplicates"):
