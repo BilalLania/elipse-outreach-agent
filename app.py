@@ -117,6 +117,13 @@ custom_css = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
+:root {{
+    --primary-color: {ACCENT_COLOR} !important;
+    --background-color: {BG_COLOR} !important;
+    --secondary-background-color: {INPUT_BG} !important;
+    --text-color: {TEXT_COLOR} !important;
+}}
+
 /* Global styles */
 html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
     background-color: {BG_COLOR} !important;
@@ -262,9 +269,47 @@ p, span, label, div {{
     margin-left: 6px;
 }}
 
-/* Buttons */
+/* Universal Buttons (Standard, Secondary, Popovers, Downloads) */
+button,
+div.stButton > button,
+div[data-testid="stPopover"] > button,
+div[data-testid="stPopoverButton"],
+div[data-testid="stPopover"] button,
+div[data-testid="stDownloadButton"] > button {{
+    background-color: {CARD_BG} !important;
+    background: {CARD_BG} !important;
+    color: {TEXT_COLOR} !important;
+    border: 1px solid {CARD_BORDER} !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+    transition: all 0.2s ease !important;
+}}
+
+button:hover,
+div.stButton > button:hover,
+div[data-testid="stPopover"] > button:hover,
+div[data-testid="stPopoverButton"]:hover,
+div[data-testid="stPopover"] button:hover {{
+    border-color: {ACCENT_COLOR} !important;
+    color: {ACCENT_COLOR} !important;
+}}
+
+div[data-testid="stPopover"] svg,
+div[data-testid="stPopover"] p,
+div[data-testid="stPopover"] span,
+div[data-testid="stPopoverButton"] svg,
+div[data-testid="stPopoverButton"] p,
+div[data-testid="stPopoverButton"] span {{
+    color: {TEXT_COLOR} !important;
+    fill: {TEXT_COLOR} !important;
+}}
+
+/* Primary Buttons */
+button[kind="primary"],
 div.stButton > button[kind="primary"] {{
     background-color: {ACCENT_COLOR} !important;
+    background: {ACCENT_COLOR} !important;
     color: white !important;
     border: none !important;
     border-radius: 8px !important;
@@ -274,38 +319,46 @@ div.stButton > button[kind="primary"] {{
     transition: background-color 0.2s ease !important;
 }}
 
+button[kind="primary"]:hover,
 div.stButton > button[kind="primary"]:hover {{
     background-color: {ACCENT_HOVER} !important;
+    background: {ACCENT_HOVER} !important;
+    color: white !important;
 }}
 
-div.stButton > button[kind="secondary"] {{
-    background-color: {CARD_BG} !important;
-    color: {TEXT_COLOR} !important;
-    border: 1px solid {CARD_BORDER} !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    font-size: 0.88rem !important;
-    transition: all 0.2s ease !important;
-}}
-
-div.stButton > button[kind="secondary"]:hover {{
-    border-color: {ACCENT_COLOR} !important;
-    color: {ACCENT_COLOR} !important;
-}}
-
-/* Form elements & Inputs */
+/* Form elements & Inputs - Comprehensive Container Overrides */
+div[data-testid="stTextInput"],
+div[data-testid="stTextInput"] > div,
+div[data-testid="stTextInputRootElement"],
+div[data-testid="stTextInputRootElement"] > div,
+div[data-testid="stTextInput"] div[data-baseweb="base-input"],
+div[data-testid="stTextInput"] div[data-baseweb="input"],
 div[data-baseweb="input"],
 div[data-baseweb="base-input"],
-div[data-baseweb="textarea"] {{
+div[data-baseweb="textarea"],
+div[data-testid="stTextArea"],
+div[data-testid="stTextArea"] > div,
+div[data-testid="stNumberInput"],
+div[data-testid="stNumberInput"] > div,
+div[data-testid="stNumberInput"] input {{
     background-color: {INPUT_BG} !important;
+    background: {INPUT_BG} !important;
     border: 1px solid {CARD_BORDER} !important;
+    color: {TEXT_COLOR} !important;
     border-radius: 8px !important;
+}}
+
+div[data-baseweb="input"]:focus-within,
+div[data-testid="stTextInput"] div:focus-within {{
+    border-color: {ACCENT_COLOR} !important;
+    box-shadow: 0 0 0 1px {ACCENT_COLOR} !important;
 }}
 
 input, textarea, select {{
     color: {TEXT_COLOR} !important;
     -webkit-text-fill-color: {TEXT_COLOR} !important;
     background-color: transparent !important;
+    background: transparent !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
 }}
 
@@ -322,24 +375,36 @@ div[data-testid="stWidgetLabel"] p {{
     font-size: 0.85rem !important;
 }}
 
-/* Selectbox & Popovers */
-div[data-baseweb="select"] > div {{
+/* Selectbox */
+div[data-baseweb="select"],
+div[data-baseweb="select"] > div,
+div[data-testid="stSelectbox"] > div,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] {{
     background-color: {INPUT_BG} !important;
+    background: {INPUT_BG} !important;
     border: 1px solid {CARD_BORDER} !important;
     color: {TEXT_COLOR} !important;
     border-radius: 8px !important;
 }}
 
-div[data-baseweb="select"] span {{
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] div {{
     color: {TEXT_COLOR} !important;
 }}
 
+/* Popover Floating Body & Dropdown Menus */
+div[data-testid="stPopoverBody"],
+div[data-testid="stPopoverContent"],
 div[data-baseweb="popover"],
+div[data-baseweb="popover"] > div,
 div[data-baseweb="menu"],
 ul[data-baseweb="menu"] {{
     background-color: {CARD_BG} !important;
+    background: {CARD_BG} !important;
     border: 1px solid {CARD_BORDER} !important;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+    color: {TEXT_COLOR} !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25) !important;
 }}
 
 li[data-baseweb="menu-item"] {{
@@ -355,6 +420,7 @@ li[data-baseweb="menu-item"]:hover {{
 /* Expanders */
 div[data-testid="stExpander"] {{
     background-color: {CARD_BG} !important;
+    background: {CARD_BG} !important;
     border: 1px solid {CARD_BORDER} !important;
     border-radius: 10px !important;
     margin-bottom: 0.75rem !important;
@@ -364,6 +430,45 @@ div[data-testid="stExpander"] summary p,
 div[data-testid="stExpander"] summary span {{
     color: {TEXT_COLOR} !important;
     font-weight: 600 !important;
+}}
+
+/* Modals & Dialogs */
+div[data-testid="stModal"],
+div[data-testid="stDialog"],
+div[role="dialog"] {{
+    background-color: {CARD_BG} !important;
+    background: {CARD_BG} !important;
+    color: {TEXT_COLOR} !important;
+}}
+
+/* Tabs */
+div[data-testid="stTabs"] button[data-baseweb="tab"] {{
+    color: {TEXT_MUTED} !important;
+    background: transparent !important;
+}}
+
+div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] {{
+    color: {ACCENT_COLOR} !important;
+    border-bottom-color: {ACCENT_COLOR} !important;
+}}
+
+div[data-baseweb="tab-highlight"] {{
+    background-color: {ACCENT_COLOR} !important;
+}}
+
+/* File Uploader */
+section[data-testid="stFileUploadDropzone"] {{
+    background-color: {INPUT_BG} !important;
+    background: {INPUT_BG} !important;
+    border: 1px dashed {CARD_BORDER} !important;
+    color: {TEXT_COLOR} !important;
+    border-radius: 8px !important;
+}}
+
+section[data-testid="stFileUploadDropzone"] div,
+section[data-testid="stFileUploadDropzone"] span,
+section[data-testid="stFileUploadDropzone"] small {{
+    color: {TEXT_MUTED} !important;
 }}
 
 /* Pills & Segmented Controls - Bulletproof Contrast Override */
