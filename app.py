@@ -1099,14 +1099,28 @@ def render_sales_problems_ui(key_prefix: str = "today", default_expanded: bool =
 if st.session_state["active_tab"] == "Today":
     today_formatted = datetime.now().strftime("%A, %B %d, %Y").upper()
 
-    # Hero Greetings
+    # Hero Greetings with Salesforce Motivational Quotes
+    SALESFORCE_QUOTES = [
+        ("Control what you can control — your list, your tone, your effort.", "Belal Batrawy"),
+        ("It’s not about having the right opportunities. It’s about handling the opportunities right.", "Mark Hunter"),
+        ("Quality is better than quantity. One home run is better than two doubles.", "Steve Jobs"),
+        ("You don’t get great at selling in a day. You get great at selling day by day.", "Jeffrey Gitomer"),
+        ("If there is one critical ingredient for wealth and happiness, it is discipline.", "Jim Rohn"),
+        ("Focus on making your customers as successful as possible, and your success will always follow.", "Ian Koniak"),
+        ("It can take a lot of 'no's' before you find someone who needs your product, but they are out there.", "Daniel Disney"),
+        ("Today's clients aren't just skimming for the lowest price — they're looking for genuine connection.", "Simon Bowen"),
+        ("You can be the same as everyone else, or you can change the game and create curiosity to win more.", "Dale Dupree"),
+    ]
+    q_text, q_author = SALESFORCE_QUOTES[datetime.now().day % len(SALESFORCE_QUOTES)]
+
     st.markdown(f'<div class="date-eyebrow">{today_formatted}</div>', unsafe_allow_html=True)
     st.markdown(
         f"""
-        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 1.25rem;">
-            <div>
-                <div class="hero-heading">Road to Million Dollar $$$</div>
-                <div class="subtitle">Wall Street outbound velocity · High-ticket 3D deals & pipeline domination.</div>
+        <div style="margin-bottom: 1.25rem;">
+            <div class="hero-heading" style="font-size: 2.35rem; margin-bottom: 0.25rem;">Road to Million Dollar $$$</div>
+            <div style="font-size: 0.85rem; color: {TEXT_MUTED}; font-style: italic; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span style="color: {ACCENT_COLOR}; font-style: normal; font-weight: 700;">“{q_text}”</span>
+                <span style="font-style: normal; color: {TEXT_MUTED}; font-weight: 600;">— {q_author}</span>
             </div>
         </div>
         """,
