@@ -455,3 +455,91 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
         "skipped_duplicates": skipped_duplicates,
         "leads": new_leads_list,
     }
+
+
+def generate_cold_call_battlecard(
+    company_name: str,
+    website: str = "",
+    contact_name: str = "Decision Maker",
+    contact_role: str = "Owner",
+    industry_tag: str = "⚡ Tech & Commercial Products",
+) -> dict:
+    """
+    Generates tailored 3D configurator sales angle, 20-second cold-call phone opener,
+    and 3 custom objection rebuttals for an outbound sales rep.
+    """
+    first_name = contact_name.split()[0] if contact_name and contact_name != "Decision Maker" else "there"
+    fallback_script = (
+        f"Hi {first_name}, Bilal with Elipse Studio. I was checking out {company_name}'s collection online, "
+        f"and noticed your buyers currently browse static photos before asking for a quote. "
+        f"We build interactive real-time 3D web configurators that let clients customize options live on your website before buying. "
+        f"Would you be open to a 3-minute visual concept tailored for {company_name} this Thursday?"
+    )
+    fallback_objections = (
+        "**• 'We already have photos on our site':**\n"
+        "Photos show what you already built; an interactive 3D builder lets high-ticket buyers customize what they want to buy today.\n\n"
+        "**• 'Just send me an email with information':**\n"
+        "I'll send that over to your direct inbox right now. Are you at your screen Thursday at 2 PM to see a 3-minute live preview?\n\n"
+        "**• 'We are too busy / call back in 6 months':**\n"
+        "Completely understand. Our 3D models integrate directly into your site in under 2 weeks without eating up your team's time."
+    )
+    fallback_help = (
+        f"{company_name} sells customizable high-ticket products using static 2D gallery photos. "
+        f"Adding a real-time Web 3D configurator increases customer time-on-site and generates quote-ready configurations."
+    )
+    fallback_email = (
+        f"Hi {first_name},\n\n"
+        f"I came across {company_name} while researching leaders in {industry_tag}. Your builds look impressive.\n\n"
+        f"Right now, buyers imagine custom configurations using static photos. We build real-time 3D web configurators that let customers customize finishes, materials, and options live on your website before ordering.\n\n"
+        f"Would you be open to a quick 5-minute visual demo? You can grab a time here: {get_calendar_link()}\n\n"
+        f"Best,\nBilal\nFounder, Elipse Studio"
+    )
+
+    prompt = f"""
+Company: {company_name}
+Website: {website}
+Contact: {contact_name} ({contact_role})
+Sector: {industry_tag}
+
+You are an elite B2B sales development strategist for Elipse Studio (custom 3D web configurators, CGI animations, and digital twins).
+Generate a high-conversion cold-call battlecard for a sales rep calling {contact_name} at {company_name}.
+
+Return JSON:
+{{
+  "how_we_help": "1-2 punchy sentences explaining exactly why {company_name} needs real-time 3D web configuration over static photos.",
+  "phone_script": "A natural, conversational 20-second cold-call opener (under 55 words) spoken by the sales rep. Starts with polite disruption, mentions an observation about their products, pitches interactive 3D customization, and ends with a low-friction meeting ask.",
+  "objection_matrix": "Markdown text containing specific 1-sentence rebuttals for: 1. 'We already have photos', 2. 'Just send me an email', 3. 'Not interested / too small'",
+  "email_body": "Short 65-word follow-up email."
+}}
+"""
+    try:
+        client = get_gemini_client()
+        for model_name in MODEL_CASCADE[:3]:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.3,
+                        response_mime_type="application/json",
+                    ),
+                )
+                data = extract_json_safe(response.text)
+                if isinstance(data, dict) and data.get("phone_script"):
+                    return {
+                        "how_we_help": data.get("how_we_help", fallback_help),
+                        "phone_script": data.get("phone_script", fallback_script),
+                        "objection_matrix": data.get("objection_matrix", fallback_objections),
+                        "email_body": data.get("email_body", fallback_email),
+                    }
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return {
+        "how_we_help": fallback_help,
+        "phone_script": fallback_script,
+        "objection_matrix": fallback_objections,
+        "email_body": fallback_email,
+    }

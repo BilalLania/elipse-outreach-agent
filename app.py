@@ -31,6 +31,12 @@ try:
 except Exception:
     pass
 
+import lead_engine
+try:
+    importlib.reload(lead_engine)
+except Exception:
+    pass
+
 STANDARD_CATEGORIES = getattr(db, "STANDARD_CATEGORIES", [
     "⛳ Custom Golf Carts",
     "🏎️ Custom Automotive & Mobility",
@@ -376,9 +382,11 @@ with st.sidebar:
 
     # Navigation menu
     open_problems_count = len(db.get_sales_problems(status_filter="Open"))
+    call_ready_count = len([l for l in db.get_all_leads() if l.get("pipeline_stage") in ["draft_ready", "followup_due"] and l.get("phone_status") != "dead_disconnected"])
     nav_options = [
         ("Today", "⊞", 0),
-        ("Sales Terminal", "⚡", 0),
+        ("Sales Terminal", "📊", 0),
+        ("Cold Call Desk", "⚡", call_ready_count),
         ("Problem Desk", "🎯", open_problems_count),
         ("Pipeline", "💼", metrics.get("active_opportunities", 0)),
         ("Contacts", "👥", metrics.get("total_leads", 0)),
@@ -387,10 +395,10 @@ with st.sidebar:
     ]
 
     for name, icon, count in nav_options:
-        badge_html = f'<span class="badge-count">{count}</span>' if count > 0 and name in ["Follow-ups", "Problem Desk"] else ""
+        badge_html = f'<span class="badge-count">{count}</span>' if count > 0 and name in ["Follow-ups", "Problem Desk", "Cold Call Desk"] else ""
         is_selected = st.session_state["active_tab"] == name
         btn_label = f"{icon}  {name}"
-        if count > 0 and name in ["Follow-ups", "Problem Desk"]:
+        if count > 0 and name in ["Follow-ups", "Problem Desk", "Cold Call Desk"]:
             btn_label = f"{icon}  {name} ({count})"
 
         if st.button(
@@ -1057,6 +1065,332 @@ elif st.session_state["active_tab"] == "Sales Terminal":
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# VIEW: COLD CALL DESK (Zero-Research Calling Deck & Battlecard Queue)
+# ---------------------------------------------------------------------------
+elif st.session_state["active_tab"] == "Cold Call Desk":
+    st.markdown('<div class="date-eyebrow">OUTBOUND VELOCITY // ZERO-RESEARCH CALLING DESK</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-heading">Cold Call Battlecard Deck</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">300 daily pre-scrubbed leads with verified direct lines, live on-screen 20-second scripts, and objection rebuttals.</div>', unsafe_allow_html=True)
+
+    # Ingestion Expander: Apollo API & CSV Importer
+    with st.expander("📥 **Ingest Daily 300-Lead Batch (Apollo.io API or Bulk CSV Drag-and-Drop)**", expanded=False):
+        tab_apollo, tab_csv = st.tabs(["🚀 Apollo.io Direct API", "📁 Bulk CSV Drag-and-Drop"])
+
+        with tab_apollo:
+            st.markdown("Query Apollo.io's B2B database directly for verified decision-maker emails, mobile phone numbers, and LinkedIn URLs.")
+            ap_c1, ap_c2 = st.columns([3, 1.2])
+            with ap_c1:
+                icp_query = st.text_input(
+                    "Target ICP Query",
+                    value="Custom golf cart builders and luxury vehicle manufacturers in US with $1M-$20M revenue",
+                    key="apollo_icp_query",
+                )
+            with ap_c2:
+                batch_limit = st.slider("Leads to Fetch", min_value=10, max_value=100, value=30, step=10, key="apollo_batch_limit")
+
+            ap_key_input = st.text_input(
+                "Apollo.io API Key",
+                value=lead_engine.get_apollo_key() or "",
+                type="password",
+                placeholder="Paste Apollo API key...",
+                key="apollo_api_key_input",
+                help="Get your key from Apollo.io -> Settings -> API Keys",
+            )
+
+            if st.button("🚀 Fetch & Enrich Batch from Apollo", key="btn_fetch_apollo", type="primary"):
+                with st.spinner(f"Querying Apollo for verified executives matching '{icp_query}'..."):
+                    result = lead_engine.query_apollo_leads(icp_query, limit=batch_limit, api_key=ap_key_input.strip() or None)
+
+                if not result.get("success"):
+                    st.error(f"⚠️ {result.get('error')}")
+                else:
+                    fetched_leads = result.get("leads", [])
+                    st.info(f"Retrieved {len(fetched_leads)} leads from Apollo. Generating AI sales scripts & battlecards...")
+
+                    prog_bar = st.progress(0)
+                    def update_prog(cur, tot, name):
+                        prog_bar.progress(cur / tot, text=f"Analyzing {name} ({cur}/{tot})...")
+
+                    enriched_leads = lead_engine.synthesize_lead_battlecards(fetched_leads, progress_callback=update_prog)
+                    inserted = db.batch_add_leads(enriched_leads)
+                    st.success(f"🎉 Successfully added {inserted} verified, call-ready leads to your Cold Call Desk!")
+                    st.rerun()
+
+        with tab_csv:
+            st.markdown("Drag and drop any CSV export from **Apollo, ZoomInfo, Clay, or LinkedIn Sales Navigator**. The engine auto-detects columns, standardizes phone numbers, and generates custom scripts.")
+            uploaded_csv = st.file_uploader("Upload CSV File", type=["csv"], key="csv_lead_uploader")
+
+            if uploaded_csv:
+                csv_text = uploaded_csv.getvalue().decode("utf-8", errors="ignore")
+                parsed_res = lead_engine.parse_and_enrich_csv(csv_text, max_records=300)
+
+                if not parsed_res.get("success"):
+                    st.error(f"⚠️ {parsed_res.get('error')}")
+                else:
+                    leads_to_add = parsed_res.get("leads", [])
+                    st.info(f"Detected {len(leads_to_add)} unique leads in CSV (skipped {parsed_res.get('skipped_duplicates', 0)} duplicates already in CRM).")
+
+                    if st.button(f"⚡ Scrub Phones & Generate Battlecards ({len(leads_to_add)} Leads)", key="btn_process_csv", type="primary"):
+                        prog_bar = st.progress(0)
+                        def update_csv_prog(cur, tot, name):
+                            prog_bar.progress(cur / tot, text=f"Writing 20-second script for {name} ({cur}/{tot})...")
+
+                        enriched = lead_engine.synthesize_lead_battlecards(leads_to_add, progress_callback=update_csv_prog)
+                        inserted = db.batch_add_leads(enriched)
+                        st.success(f"🎉 Successfully scrubbed and imported {inserted} call-ready leads!")
+                        st.rerun()
+
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+    # Calling Queue Leads
+    all_raw_leads = db.get_all_leads()
+    call_queue = [
+        l for l in all_raw_leads
+        if l.get("pipeline_stage") in ["draft_ready", "followup_due"]
+        and l.get("phone_status") != "dead_disconnected"
+    ]
+
+    # Queue Metrics Bar
+    direct_lines = sum(1 for l in call_queue if l.get("phone_status") == "verified_direct" and l.get("contact_phone"))
+    queue_val = sum(float(l.get("deal_value") or 15000.0) for l in call_queue)
+
+    qm_c1, qm_c2, qm_c3, qm_c4 = st.columns(4)
+    with qm_c1:
+        st.markdown(clean_html(f"""
+        <div class="crm-card" style="padding:1rem;">
+            <div class="metric-label">CALL-READY QUEUE</div>
+            <div class="terminal-ticker" style="color:{TEXT_COLOR}; font-size:1.8rem;">{len(call_queue)}</div>
+            <div class="metric-sub">Active leads to dial today</div>
+        </div>
+        """), unsafe_allow_html=True)
+
+    with qm_c2:
+        st.markdown(clean_html(f"""
+        <div class="crm-card" style="padding:1rem;">
+            <div class="metric-label">VERIFIED DIRECT LINES</div>
+            <div class="terminal-ticker" style="color:#10B981; font-size:1.8rem;">{direct_lines}</div>
+            <div class="metric-sub">Direct cell / desk phones</div>
+        </div>
+        """), unsafe_allow_html=True)
+
+    with qm_c3:
+        st.markdown(clean_html(f"""
+        <div class="crm-card" style="padding:1rem;">
+            <div class="metric-label">QUEUE PIPELINE VALUE</div>
+            <div class="terminal-ticker" style="color:{ACCENT_COLOR}; font-size:1.8rem;">${queue_val:,.0f}</div>
+            <div class="metric-sub">Total potential contract value</div>
+        </div>
+        """), unsafe_allow_html=True)
+
+    with qm_c4:
+        st.markdown(clean_html(f"""
+        <div class="crm-card" style="padding:1rem;">
+            <div class="metric-label">DIALING EFFICIENCY</div>
+            <div class="terminal-ticker" style="color:#3B82F6; font-size:1.8rem;">0s</div>
+            <div class="metric-sub">Prep time / rep research</div>
+        </div>
+        """), unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+
+    # Queue Filtering Pills
+    q_cat_counts = {}
+    for l in call_queue:
+        c = l.get("industry_tag") or "⚡ Tech & Commercial Products"
+        q_cat_counts[c] = q_cat_counts.get(c, 0) + 1
+
+    pill_cats = ["All Categories"] + [c for c in STANDARD_CATEGORIES if c in q_cat_counts]
+    for c in q_cat_counts:
+        if c not in pill_cats:
+            pill_cats.append(c)
+
+    selected_q_cat = st.pills(
+        "Queue Category",
+        pill_cats,
+        default="All Categories",
+        format_func=lambda c: f"🌐 All Sectors ({len(call_queue)})" if c == "All Categories" else f"{c} ({q_cat_counts.get(c, 0)})",
+        key="cold_call_cat_pill",
+        label_visibility="collapsed",
+    )
+    if not selected_q_cat:
+        selected_q_cat = "All Categories"
+
+    filtered_queue = [l for l in call_queue if l.get("industry_tag") == selected_q_cat] if selected_q_cat != "All Categories" else call_queue
+
+    if search_query:
+        sq = search_query.lower()
+        filtered_queue = [
+            l for l in filtered_queue
+            if sq in l.get("company_name", "").lower()
+            or sq in l.get("contact_name", "").lower()
+            or sq in l.get("contact_phone", "").lower()
+        ]
+
+    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+
+    if not filtered_queue:
+        st.info("🎯 **No leads in this queue!** Use the batch ingestion drawer above to pull verified leads from Apollo or drop a CSV file.")
+    else:
+        for idx, lead in enumerate(filtered_queue):
+            lead_id = lead["id"]
+            comp_name = lead["company_name"]
+            c_name = lead.get("contact_name") or "Decision Maker"
+            c_role = lead.get("contact_role") or "Owner"
+            c_phone = lead.get("contact_phone") or ""
+            phone_stat = lead.get("phone_status") or "verified_direct"
+            c_email = lead.get("contact_email") or ""
+            c_li = lead.get("contact_linkedin") or ""
+            deal_val = float(lead.get("deal_value") or 15000.0)
+            tag = lead.get("industry_tag") or "⚡ Tech & Commercial Products"
+
+            # Check if phone_script exists; if missing, synthesize fallback
+            script = lead.get("phone_script")
+            if not script or len(script) < 15:
+                script = (
+                    f"Hi {c_name.split()[0]}, Bilal with Elipse Studio. I was looking at {comp_name}'s custom collection online, "
+                    f"and noticed your buyers browse static photos rather than customizing finishes live in 3D. "
+                    f"We build interactive real-time 3D web configurators that let clients customize options live on your site before buying. "
+                    f"Would you be open to a 3-minute visual concept tailored for {comp_name} this Thursday?"
+                )
+
+            objection_text = lead.get("objection_notes")
+            if not objection_text or len(objection_text) < 15:
+                objection_text = (
+                    "**- 'We already have photos on our site':**\\n"
+                    "Photos show what you already built; an interactive 3D builder lets high-ticket buyers customize what they want to buy today.\\n\\n"
+                    "**- 'Just send me an email with information':**\\n"
+                    "I'll send that over to your direct inbox right now. Are you at your screen Thursday at 2 PM to see a 3-minute live preview?\\n\\n"
+                    "**- 'We are too busy / call back in 6 months':**\\n"
+                    "Completely understand. Our 3D models integrate directly into your site in under 2 weeks without eating up your team's time."
+                )
+
+            # Phone Status Badge
+            if phone_stat == "verified_direct" and c_phone:
+                phone_badge = '<span class="terminal-pill-green">🟢 Verified Direct Line</span>'
+                card_border_color = "#10B981"
+            elif phone_stat == "switchboard":
+                phone_badge = '<span class="terminal-pill-amber">🟡 Switchboard</span>'
+                card_border_color = "#F59E0B"
+            else:
+                phone_badge = '<span style="background:rgba(239,68,68,0.12); color:#EF4444; font-size:0.72rem; font-weight:700; padding:3px 8px; border-radius:4px;">⚪ Needs Direct Line</span>'
+                card_border_color = CARD_BORDER
+
+            with st.container():
+                st.markdown(clean_html(f"""
+                <div class="crm-card" style="padding: 1.25rem 1.4rem; margin-bottom: 1.25rem; border-left: 4px solid {card_border_color};">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+                        <div>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <span style="font-family:'Playfair Display', serif; font-size:1.3rem; font-weight:700; color:{TEXT_COLOR};">{comp_name}</span>
+                                <span style="font-family:'JetBrains Mono', monospace; font-size:0.82rem; font-weight:700; color:{ACCENT_COLOR};">${deal_val:,.0f}</span>
+                                {phone_badge}
+                                <span style="font-size:0.75rem; color:{TEXT_MUTED}; background:{INPUT_BG}; padding:2px 8px; border-radius:4px;">{tag}</span>
+                            </div>
+                            <div style="font-size:0.9rem; color:{TEXT_COLOR}; margin-top:3px;">
+                                👤 <b>{c_name}</b> · <i>{c_role}</i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                """), unsafe_allow_html=True)
+
+                # Two Columns: Channel/Dialer & On-Screen Script
+                col_dialer, col_battlecard = st.columns([1.3, 2.2])
+
+                with col_dialer:
+                    st.markdown("##### 📞 Direct Outbound Line")
+                    if c_phone:
+                        st.markdown(
+                            f'<a href="tel:{c_phone}" style="display:block; text-align:center; padding:12px 14px; background:#10B981; color:white; font-family:monospace; font-weight:700; font-size:1.15rem; border-radius:8px; text-decoration:none; margin-bottom:10px; box-shadow: 0 2px 8px rgba(16,185,129,0.25);">📞 Call {c_phone}</a>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.warning("No phone on file.")
+                        new_p = st.text_input("Enter Direct Phone", key=f"quick_p_{lead_id}")
+                        if st.button("Save Phone", key=f"save_p_{lead_id}"):
+                            scrub = lead_engine.scrub_and_format_phone(new_p)
+                            db.update_lead(lead_id, contact_phone=scrub["phone"], phone_status=scrub["status"])
+                            st.rerun()
+
+                    # Quick Links
+                    st.markdown("##### 🌐 Research & Channels")
+                    ch_links = []
+                    if lead.get("company_website"):
+                        ch_links.append(f"[↗ Website]({lead['company_website']})")
+                    if c_email and c_email != "unknown":
+                        ch_links.append(f"[✉️ {c_email}](mailto:{c_email})")
+                    if c_li:
+                        ch_links.append(f"[🔗 LinkedIn]({c_li})")
+
+                    if ch_links:
+                        st.markdown(" · ".join(ch_links))
+
+                    render_hunter_decision_makers_ui(lead, key_prefix="cc_desk")
+
+                    # How We Can Help Box
+                    st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+                    st.markdown(clean_html(f"""
+                    <div style="background:{INPUT_BG}; border-left:3px solid {ACCENT_COLOR}; padding:8px 12px; border-radius:0 6px 6px 0; font-size:0.8rem; color:{TEXT_MUTED}; margin-top:6px;">
+                        <strong style="color:{TEXT_COLOR};">Why Elipse Studio Helps:</strong><br>
+                        {lead.get('reason') or 'High-ticket custom catalog converts higher with real-time 3D web builder.'}
+                    </div>
+                    """), unsafe_allow_html=True)
+
+                with col_battlecard:
+                    st.markdown("##### 🎯 Live 20-Second Phone Script (Read Verbatim)")
+                    st.markdown(clean_html(f"""
+                    <div style="background:{CARD_BG}; border:1.5px solid {ACCENT_COLOR}; padding:14px 16px; border-radius:8px; font-size:0.95rem; line-height:1.55; color:{TEXT_COLOR}; margin-bottom:12px; font-family:'Plus Jakarta Sans', sans-serif;">
+                        "{script}"
+                    </div>
+                    """), unsafe_allow_html=True)
+
+                    with st.expander("🛡️ **Live Objection Matrix & Rebuttals**", expanded=False):
+                        st.markdown(objection_text)
+
+                    # Quick Rep Notes
+                    rep_call_note = st.text_input("Call Notes / Follow-up Details", placeholder="Spoke with receptionist, Hal returns at 3 PM...", key=f"cnote_{lead_id}")
+
+                    # 1-Click Speed Dispositions Bar
+                    st.markdown("<div style='font-size:0.75rem; font-weight:700; color:" + TEXT_MUTED + "; text-transform:uppercase; margin-bottom:6px;'>⚡ 1-Click Call Outcome Dispositions</div>", unsafe_allow_html=True)
+                    disp_cols = st.columns(5)
+
+                    with disp_cols[0]:
+                        if st.button("🔴 Dead Line", key=f"btn_dead_{lead_id}", help="Number is disconnected or bad. Removes from queue.", use_container_width=True):
+                            db.update_lead_call_outcome(lead_id, "dead_number", rep_call_note)
+                            st.warning(f"Marked {comp_name} as Dead Line.")
+                            st.rerun()
+
+                    with disp_cols[1]:
+                        if st.button("🟡 Voicemail", key=f"btn_vm_{lead_id}", help="Left pitch voicemail. Keeps in Follow-up queue.", use_container_width=True):
+                            db.update_lead_call_outcome(lead_id, "voicemail", rep_call_note)
+                            st.info("Logged Voicemail.")
+                            st.rerun()
+
+                    with disp_cols[2]:
+                        if st.button("💬 No Interest", key=f"btn_dnc_{lead_id}", help="Spoke with decision maker, not interested.", use_container_width=True):
+                            db.update_lead_call_outcome(lead_id, "not_interested", rep_call_note)
+                            st.info("Moved to Closed Lost.")
+                            st.rerun()
+
+                    with disp_cols[3]:
+                        if st.button("⏳ Callback", key=f"btn_cb_{lead_id}", help="Asked to call back later.", use_container_width=True):
+                            db.update_lead_call_outcome(lead_id, "callback_scheduled", rep_call_note)
+                            st.info("Logged Callback.")
+                            st.rerun()
+
+                    with disp_cols[4]:
+                        if st.button("🎯 Booked!", key=f"btn_book_{lead_id}", type="primary", help=f"Qualified Meeting Booked! Advances to Pipeline stage.", use_container_width=True):
+                            db.update_lead_call_outcome(lead_id, "meeting_booked", rep_call_note)
+                            st.balloons()
+                            st.success(f"🎉 BOOM! Meeting booked for {comp_name} (${deal_val:,.0f})!")
+                            st.rerun()
+
+                st.markdown("<hr style='border:none; border-top:1px solid " + CARD_BORDER + "; margin:20px 0;'>", unsafe_allow_html=True)
+
+
+
+
 # VIEW: PROBLEM DESK (Full-page Priority Manager)
 # ---------------------------------------------------------------------------
 elif st.session_state["active_tab"] == "Problem Desk":

@@ -86,6 +86,10 @@ def init_db():
             "pipeline_stage": "TEXT NOT NULL DEFAULT 'draft_ready'",
             "notes": "TEXT",
             "followup_date": "TEXT",
+            "phone_script": "TEXT",
+            "objection_notes": "TEXT",
+            "phone_status": "TEXT DEFAULT 'verified_direct'",
+            "lead_score": "INTEGER DEFAULT 90",
         }
 
         for col, col_type in column_defs.items():
@@ -359,6 +363,10 @@ def add_lead(
     notes="",
     followup_date="",
     source_prompt="",
+    phone_script="",
+    objection_notes="",
+    phone_status="verified_direct",
+    lead_score=90,
 ):
     now = datetime.now().isoformat(timespec="seconds")
     if not followup_date:
@@ -370,8 +378,9 @@ def add_lead(
                (company_name, company_website, contact_name, contact_role, contact_email,
                 contact_phone, contact_linkedin, industry_tag, deal_value, pipeline_stage,
                 status, reason, subject, body, notes, followup_date, source_prompt,
+                phone_script, objection_notes, phone_status, lead_score,
                 created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 company_name,
                 company_website,
@@ -389,11 +398,100 @@ def add_lead(
                 notes,
                 followup_date,
                 source_prompt,
+                phone_script,
+                objection_notes,
+                phone_status,
+                lead_score,
                 now,
                 now,
             ),
         )
         return cur.lastrowid
+
+
+def batch_add_leads(leads_list):
+    """High-performance batch insertion for bulk-imported or enriched leads."""
+    now = datetime.now().isoformat(timespec="seconds")
+    today_str = date.today().isoformat()
+    inserted_count = 0
+
+    with get_conn() as conn:
+        for lead in leads_list:
+            comp = lead.get("company_name", "").strip()
+            if not comp or is_duplicate(comp):
+                continue
+
+            fu_date = lead.get("followup_date") or today_str
+            conn.execute(
+                """INSERT INTO leads
+                   (company_name, company_website, contact_name, contact_role, contact_email,
+                    contact_phone, contact_linkedin, industry_tag, deal_value, pipeline_stage,
+                    status, reason, subject, body, notes, followup_date, source_prompt,
+                    phone_script, objection_notes, phone_status, lead_score,
+                    created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    comp,
+                    lead.get("company_website", "").strip(),
+                    lead.get("contact_name", "Decision Maker").strip(),
+                    lead.get("contact_role", "").strip(),
+                    lead.get("contact_email", "unknown").strip(),
+                    lead.get("contact_phone", "").strip(),
+                    lead.get("contact_linkedin", "").strip(),
+                    lead.get("industry_tag", "⚡ Tech & Commercial Products").strip(),
+                    float(lead.get("deal_value") or 15000.0),
+                    lead.get("pipeline_stage", "draft_ready"),
+                    lead.get("reason", "").strip(),
+                    lead.get("subject", f"3D Configurator for {comp}").strip(),
+                    lead.get("body", "").strip(),
+                    lead.get("notes", "").strip(),
+                    fu_date,
+                    lead.get("source_prompt", "").strip(),
+                    lead.get("phone_script", "").strip(),
+                    lead.get("objection_notes", "").strip(),
+                    lead.get("phone_status", "verified_direct"),
+                    int(lead.get("lead_score") or 90),
+                    now,
+                    now,
+                ),
+            )
+            inserted_count += 1
+    return inserted_count
+
+
+def update_lead_call_outcome(lead_id, outcome, rep_notes=""):
+    """
+    Updates lead stage and status based on rep cold call disposition:
+    - 'meeting_booked': advances stage to meeting_booked
+    - 'voicemail': sets stage to followup_due
+    - 'dead_number': sets phone_status to 'dead_disconnected' and stage to 'lost'
+    - 'not_interested': marks stage as 'lost'
+    - 'callback_scheduled': sets stage to followup_due
+    """
+    now = datetime.now().isoformat(timespec="seconds")
+    stage_map = {
+        "meeting_booked": "meeting_booked",
+        "voicemail": "followup_due",
+        "dead_number": "lost",
+        "not_interested": "lost",
+        "callback_scheduled": "followup_due",
+    }
+    new_stage = stage_map.get(outcome, "followup_due")
+    phone_stat = "dead_disconnected" if outcome == "dead_number" else "verified_direct"
+
+    with get_conn() as conn:
+        lead = conn.execute("SELECT notes FROM leads WHERE id = ?", (lead_id,)).fetchone()
+        existing_notes = lead["notes"] if lead and lead["notes"] else ""
+        timestamp = datetime.now().strftime("%b %d, %H:%M")
+        appended_note = f"[{timestamp} Call: {outcome.replace('_', ' ').title()}] {rep_notes}".strip()
+        final_notes = f"{existing_notes}\n{appended_note}".strip() if existing_notes else appended_note
+
+        conn.execute(
+            """UPDATE leads SET
+               pipeline_stage = ?, phone_status = ?, notes = ?, updated_at = ?
+               WHERE id = ?""",
+            (new_stage, phone_stat, final_notes, now, lead_id),
+        )
 
 
 def get_all_leads(stage_filter=None, search_query=None, category_filter=None):
