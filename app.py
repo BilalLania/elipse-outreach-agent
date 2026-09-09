@@ -510,20 +510,43 @@ if st.session_state["active_tab"] == "Today":
             unsafe_allow_html=True,
         )
 
+        # Strategy Preset Quick-Select Chips
+        st.markdown("<div style='font-size:0.8rem; font-weight:600; color:" + TEXT_MUTED + "; margin-bottom:6px;'>⚡ QUICK STRATEGY PRESETS:</div>", unsafe_allow_html=True)
+        preset_cols = st.columns(5)
+        chosen_preset = None
+        with preset_cols[0]:
+            if st.button("🎪 LEAP Riyadh Exhibitors", key="preset_leap", use_container_width=True):
+                chosen_preset = "Companies attending LEAP Riyadh relevant to Elipse Studio 3D visualization, spatial digital twins, and web configurators for in-person meetings"
+        with preset_cols[1]:
+            if st.button("🛋️ Luxury Bespoke Furniture", key="preset_furn", use_container_width=True):
+                chosen_preset = "Top 5 luxury bespoke furniture and joinery manufacturers in UAE or UK without a 3D web configurator"
+        with preset_cols[2]:
+            if st.button("🏎️ Custom Automotive / EV", key="preset_auto", use_container_width=True):
+                chosen_preset = "Custom automotive, electric vehicle, and specialty mobility builders in GCC or USA who need 3D configurators"
+        with preset_cols[3]:
+            if st.button("⛵ Superyacht & Marine", key="preset_yacht", use_container_width=True):
+                chosen_preset = "Top luxury yacht builders and custom marine interior manufacturers without interactive 3D configurators"
+        with preset_cols[4]:
+            if st.button("🏗️ Saudi Vision 2030 PropTech", key="preset_prop", use_container_width=True):
+                chosen_preset = "Major real estate developers and spatial tech firms in Saudi Arabia and UAE who need interactive 3D architectural twins"
+
         with st.form("today_ai_finder_form"):
             prompt_c1, prompt_c2 = st.columns([4.2, 1.3])
             with prompt_c1:
                 today_prompt = st.text_input(
                     "Search Criteria",
-                    placeholder="e.g. Find 5 luxury bespoke furniture or kitchen cabinet manufacturers in UAE without a web configurator",
+                    value=chosen_preset or "",
+                    placeholder="e.g. Companies attending LEAP in Riyadh relevant to Elipse Studio, or bespoke furniture makers in UAE",
                     label_visibility="collapsed",
                 )
             with prompt_c2:
                 today_submitted = st.form_submit_button("🚀 Research & Draft", type="primary", use_container_width=True)
 
-        if today_submitted and today_prompt.strip():
-            with st.spinner("AI is researching and drafting personalized opportunities for Elipse Studio..."):
-                result = agent_core.run_agent(today_prompt.strip(), log=lambda m: None)
+        target_prompt = chosen_preset if chosen_preset else (today_prompt.strip() if today_submitted and today_prompt.strip() else None)
+
+        if target_prompt:
+            with st.spinner("AI is analyzing target criteria, verifying official websites, and drafting personalized opportunities..."):
+                result = agent_core.run_agent(target_prompt, log=lambda m: None)
 
             if result.get("error"):
                 st.session_state["last_search_error"] = result["error"]

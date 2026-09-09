@@ -1,14 +1,20 @@
 """
-agent_core.py — High-performance single-pass research + drafting engine powered by Google Gemini.
+agent_core.py — Multi-Model Cascade & Context-Aware Intelligence Engine for Elipse Studio.
 
-Performs commercial intelligence analysis, identifies companies lacking 3D web configurators,
-enriches contacts via Hunter.io (when available), and drafts hyper-personalized cold emails
-in a single efficient pass.
+Features:
+1. Multi-Model Cascade with Automatic Fallback (gemini-3.6-flash, gemini-3.7-flash, gemini-flash-latest, gemini-3.5-flash, gemini-2.5-pro)
+   to ensure zero 503 / 429 downtime.
+2. Context-Aware Outreach Drafting:
+   - Event / Conference Networking (LEAP Riyadh, GITEX, Index, etc.) -> In-person booth meetups & coffee.
+   - Commercial Web 3D Configurators (Bespoke furniture, custom automotive, yachts, luxury kitchens) -> Online 3D visualizers.
+   - Architecture & Megaprojects (Saudi Vision 2030, UAE PropTech, Masterplans) -> Interactive Digital Twins & Virtual Sales Apps.
+3. Automated Website Verification & Hunter.io Decision-Maker Enrichment.
 """
 
 import os
 import json
 import re
+import time
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import requests
@@ -28,43 +34,62 @@ import db
 
 load_dotenv()
 
-MODEL = "gemini-3.6-flash"
+# Multi-Model Fallback Cascade to prevent 503 / 429 outages
+MODEL_CASCADE = [
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-flash-latest",
+    "gemini-3.5-flash",
+    "gemini-2.5-pro",
+]
+
 DEFAULT_CALENDAR_LINK = "https://calendly.com/bilal-lania-elipsestudio/15-mins-meeting"
 
-SYSTEM_PROMPT = """You are the specialized outreach research & pipeline engine for Elipse Studio,
-a 3D visualization and immersive experience studio (CGI animation, VR/AR, architectural
-visualization, motion graphics, and real-time interactive 3D WEB CONFIGURATORS).
+SYSTEM_PROMPT = """You are the elite business development intelligence engine for Elipse Studio,
+a premier 3D visualization and spatial technology studio (CGI animation, VR/AR, real-time interactive 3D Web Configurators,
+and photorealistic architectural digital twins).
 
-Your task: Given a target business criteria from Bilal, identify 3 to 5 real commercial
-companies/brands that sell physical or customizable products (e.g. bespoke furniture, custom golf carts,
-luxury interiors, automotive, yachts, industrial machinery, architectural fixtures, etc.) that do NOT
-currently have an interactive 3D Web Configurator on their website.
+Founder: Bilal (Elipse Studio).
 
-For each company:
-1. Identify the company name, website, decision maker name/role, and contact email.
-2. Note why their physical product line would convert significantly higher with an interactive 3D Web Configurator.
-3. Draft a high-converting cold email from Bilal (Elipse Studio):
-   - 60 to 90 words total. Short sentences. No marketing copy/buzzwords.
-   - Sound like Bilal personally noticed something about their product collection (first person: "I noticed...", "We build...").
-   - Mention ONE specific observation about their custom product line.
-   - Plain statement of what Elipse Studio does (interactive 3D web configurators).
-   - Low-pressure ask with the exact placeholder {{CALENDAR_LINK}} once.
-   - Sign off simply as "Bilal" or "Bilal, Elipse Studio".
+Analyze the user's outreach goal carefully. Recognize the outreach angle:
+1. EVENT / CONFERENCE NETWORKING (e.g. LEAP Riyadh, GITEX Dubai, Index Saudi, Salone del Mobile, Monaco Yacht Show):
+   - Identify real major exhibitors/companies actively participating or relevant to the event.
+   - Tailor the outreach draft specifically for IN-PERSON MEETINGS at the event (e.g. "I'll be in Riyadh for LEAP later this month...", "Let's grab a 10-minute coffee at your booth or the VIP lounge").
+   - Pitch how Elipse Studio's real-time 3D, CGI, or digital twins elevate their exhibition presence and buyer engagement.
+
+2. COMMERCIAL WEB 3D CONFIGURATOR (e.g. Custom golf carts, luxury bespoke furniture, automotive, kitchens, yachts):
+   - Identify real companies with high-customization products that only have static 2D photos.
+   - Pitch how an interactive Web 3D configurator lets customers customize options in real time and increases conversions.
+
+3. ARCHITECTURE & MEGAPROJECTS (e.g. Saudi Vision 2030, UAE PropTech, Luxury Real Estate Developers):
+   - Identify real developers, masterplan builders, and spatial tech innovators.
+   - Pitch interactive 3D web masterplans, photorealistic CGI walkthroughs, and virtual sales center apps.
+
+Email Rules:
+- 60 to 85 words total. Short, confident sentences. Zero corporate fluff/clichés.
+- Written in first person by Bilal ("I'll be attending...", "At Elipse Studio, we build...").
+- Specific observation about their project, product line, or booth.
+- If event-related: Low-pressure ask for a quick 10-minute in-person coffee/booth visit at the event.
+- If remote-related: Low-pressure ask including {{CALENDAR_LINK}} once.
+- Sign off as:
+  Best,
+  Bilal
+  Founder, Elipse Studio
 
 Return a valid JSON array of objects:
 [
   {
-    "company_name": "Company Name",
-    "company_website": "https://company.com",
-    "domain": "company.com",
-    "contact_name": "Decision Maker Name or 'Team'",
-    "contact_role": "Owner, Founder, Head of Sales, or Marketing Director",
-    "contact_email": "contact email or domain email if known, or 'unknown'",
-    "industry_tag": "Industry Niche Tag",
-    "deal_value": 18000,
-    "reason_no_configurator": "Specific observation on why a 3D configurator will increase their product conversions",
-    "subject": "Punchy personalized subject line",
-    "body": "Complete email body containing {{CALENDAR_LINK}} once"
+    "company_name": "Exact Company Name",
+    "company_website": "https://official-domain.com",
+    "domain": "official-domain.com",
+    "contact_name": "Full Name of Executive (or Department Team)",
+    "contact_role": "Executive Title (e.g. CMO, Head of Innovation, VP Marketing, Owner)",
+    "contact_email": "direct email or company contact email",
+    "industry_tag": "Relevant tag (e.g. Giga-Project / LEAP Exhibitor, Custom Automotive, Luxury Interiors)",
+    "deal_value": 35000,
+    "reason_no_configurator": "Precise reason why Elipse Studio adds massive value",
+    "subject": "Personalized punchy subject line",
+    "body": "Complete email body"
   }
 ]
 """
@@ -118,7 +143,7 @@ def verify_and_resolve_official_website(company_name: str, suggested_url: str) -
         except Exception:
             pass
 
-    # 2. Fast resolution for the real official website
+    # 2. Fast resolution for the real official website via web search
     if DDGS and company_name:
         try:
             clean_name = re.sub(r'[\"\']+', ' ', company_name).strip()
@@ -238,7 +263,7 @@ def execute_find_employee_contact(domain: str, contact_name: str = "") -> dict:
 
 
 def get_top_decision_makers(domain: str, limit: int = 3) -> list:
-    """Queries Hunter.io Domain Search and returns up to 3 top decision-maker contacts with positions, confidence, and emails."""
+    """Queries Hunter.io Domain Search and returns up to 3 top decision-maker contacts."""
     hunter_key = get_hunter_key()
     if not hunter_key:
         return []
@@ -254,10 +279,9 @@ def get_top_decision_makers(domain: str, limit: int = 3) -> list:
         if resp.status_code == 200:
             data = resp.json().get("data", {})
             emails = data.get("emails", [])
-            
-            # Prioritize executive roles
+
             priority_keywords = ["founder", "owner", "ceo", "director", "sales", "marketing", "head", "president", "partner", "vp", "chief", "manager"]
-            
+
             def score(e):
                 pos = (e.get("position") or "").lower()
                 role_bonus = 25 if any(k in pos for k in priority_keywords) else 0
@@ -286,7 +310,8 @@ def get_top_decision_makers(domain: str, limit: int = 3) -> list:
 
 def run_agent(user_prompt: str, log=None) -> dict:
     """
-    Executes single-pass AI discovery and drafting with Gemini 3.6 Flash.
+    Executes multi-model fallback cascade intelligence to research companies,
+    verify live official websites, lookup contacts, and draft custom outreach emails.
     """
     client = get_gemini_client()
     saved_count = 0
@@ -294,27 +319,36 @@ def run_agent(user_prompt: str, log=None) -> dict:
     new_leads_list = []
     cal_link = get_calendar_link()
 
-    prompt_content = f"""Target Goal from Bilal:
+    prompt_content = f"""Target Outreach Request from Bilal:
 "{user_prompt}"
 
-Identify 3 to 5 real commercial businesses/brands matching this request that do not have interactive 3D web configurators on their site. Provide complete company profiles and write a personalized email draft for each."""
+Identify 3 to 5 real commercial businesses/brands/exhibitors matching this request that would benefit significantly from Elipse Studio's 3D Configurators, CGI Animation, or Digital Twins. Provide complete company profiles and write a personalized email draft for each."""
 
-    try:
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=prompt_content,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                response_mime_type="application/json",
-                temperature=0.3,
-            ),
-        )
-        candidates = extract_json_safe(response.text) or []
-    except Exception as e:
-        return {"saved": 0, "skipped_duplicates": [], "leads": [], "error": str(e)}
+    candidates = None
+    last_error = None
+
+    # Cascade through available Gemini models to guarantee 100% uptime and resilience against 503/429
+    for model_name in MODEL_CASCADE:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt_content,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    response_mime_type="application/json",
+                    temperature=0.3,
+                ),
+            )
+            candidates = extract_json_safe(response.text)
+            if candidates and isinstance(candidates, list):
+                break
+        except Exception as e:
+            last_error = str(e)
+            time.sleep(0.5)
+            continue
 
     if not candidates or not isinstance(candidates, list):
-        return {"saved": 0, "skipped_duplicates": [], "leads": []}
+        return {"saved": 0, "skipped_duplicates": [], "leads": [], "error": last_error or "No companies found"}
 
     for c in candidates:
         if not isinstance(c, dict):
@@ -329,8 +363,8 @@ Identify 3 to 5 real commercial businesses/brands matching this request that do 
         contact_role = c.get("contact_role", "")
         contact_email = c.get("contact_email", "unknown")
         industry_tag = c.get("industry_tag", "3D Configurator / CGI")
-        deal_val = float(c.get("deal_value") or 18000.0)
-        subject = c.get("subject", f"3D Configurator for {company_name}")
+        deal_val = float(c.get("deal_value") or 25000.0)
+        subject = c.get("subject", f"Question regarding {company_name}")
         raw_body = c.get("body", "")
 
         if not company_name:
@@ -351,7 +385,7 @@ Identify 3 to 5 real commercial businesses/brands matching this request that do 
             if hunter_info.get("position") and hunter_info.get("position") != "Company Contact":
                 contact_role = hunter_info["position"]
 
-        # If email is still unknown, provide fallback domain contact email
+        # Fallback email if still missing
         if not contact_email or contact_email == "unknown":
             if domain:
                 contact_email = f"info@{domain}"
