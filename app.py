@@ -1099,7 +1099,7 @@ def render_sales_problems_ui(key_prefix: str = "today", default_expanded: bool =
 if st.session_state["active_tab"] == "Today":
     today_formatted = datetime.now().strftime("%A, %B %d, %Y").upper()
 
-    # Hero Greetings with Salesforce Motivational Quotes
+    # Salesforce Motivational Quotes (rotates every 15 minutes)
     SALESFORCE_QUOTES = [
         ("Control what you can control — your list, your tone, your effort.", "Belal Batrawy"),
         ("It’s not about having the right opportunities. It’s about handling the opportunities right.", "Mark Hunter"),
@@ -1110,20 +1110,34 @@ if st.session_state["active_tab"] == "Today":
         ("It can take a lot of 'no's' before you find someone who needs your product, but they are out there.", "Daniel Disney"),
         ("Today's clients aren't just skimming for the lowest price — they're looking for genuine connection.", "Simon Bowen"),
         ("You can be the same as everyone else, or you can change the game and create curiosity to win more.", "Dale Dupree"),
+        ("You cannot control the prospect on the other end, only your reaction to disappointment.", "Rana Kordahi"),
+        ("Want to be a great conversationalist? Let the other person talk, while you genuinely listen.", "Bob Burg"),
+        ("I really believe you only regret the things you don't do.", "Alan Bond"),
+        ("We don’t learn much when things go right. Learn from mistakes and keep improving.", "Simon Sinek"),
+        ("Opportunities don't happen. You create them.", "Chris Grosser"),
+        ("The secret of getting ahead is getting started.", "Mark Twain"),
+        ("Success is walking from failure to failure with no loss of enthusiasm.", "Winston Churchill"),
+        ("The human part of selling will never change, so give yourself the advantage of more opportunities.", "Alexine Mudawar"),
+        ("Always do your best. What you plant now, you will harvest later.", "Og Mandino"),
+        ("Action is the foundational key to all success.", "Pablo Picasso"),
     ]
-    q_text, q_author = SALESFORCE_QUOTES[datetime.now().day % len(SALESFORCE_QUOTES)]
+    slot_idx = int(time.time() // 900)  # 900s = 15 minutes
+    q_text, q_author = SALESFORCE_QUOTES[slot_idx % len(SALESFORCE_QUOTES)]
+    secs_until_refresh = max(10, 900 - int(time.time() % 900))
 
     st.markdown(f'<div class="date-eyebrow">{today_formatted}</div>', unsafe_allow_html=True)
     st.markdown(
-        f"""
-        <div style="margin-bottom: 1.25rem;">
-            <div class="hero-heading" style="font-size: 2.35rem; margin-bottom: 0.25rem;">Road to Million Dollar $$$</div>
-            <div style="font-size: 0.85rem; color: {TEXT_MUTED}; font-style: italic; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                <span style="color: {ACCENT_COLOR}; font-style: normal; font-weight: 700;">“{q_text}”</span>
-                <span style="font-style: normal; color: {TEXT_MUTED}; font-weight: 600;">— {q_author}</span>
-            </div>
+        clean_html(f"""
+        <div style="margin-bottom: 1.15rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 0.95rem; color: {TEXT_COLOR}; font-style: italic; font-weight: 500;">“{q_text}”</span>
+            <span style="font-size: 0.82rem; font-weight: 700; color: {ACCENT_COLOR};">— {q_author}</span>
         </div>
-        """,
+        <script>
+        setTimeout(function() {{
+            window.location.reload();
+        }}, {secs_until_refresh * 1000});
+        </script>
+        """),
         unsafe_allow_html=True,
     )
 
