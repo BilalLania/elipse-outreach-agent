@@ -1425,9 +1425,10 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     if c_email and c_email != "unknown":
                         ch_links.append(f"[✉️ {c_email}](mailto:{c_email})")
                     if c_li:
-                        ch_links.append(f"[🔗 Profile]({c_li})")
+                        ch_links.append(f"[🔗 LinkedIn]({c_li})")
                     else:
-                        ch_links.append(f"[🔗 Search]({li_url})")
+                        xray_url = get_linkedin_profile_url(c_name, comp_name, "")
+                        ch_links.append(f"[🔗 Search LinkedIn]({xray_url})")
 
                     if ch_links:
                         st.markdown(" · ".join(ch_links))
