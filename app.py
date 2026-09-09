@@ -17,7 +17,8 @@ import agent_core
 import team_analytics
 
 def clean_html(html_str: str) -> str:
-    return textwrap.dedent(html_str).strip()
+    # Completely strip leading whitespace from every line to prevent Markdown from ever creating code blocks
+    return "\n".join(line.lstrip() for line in html_str.splitlines()).strip()
 
 load_dotenv()
 
