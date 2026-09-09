@@ -269,7 +269,7 @@ div[data-testid="stExpander"] {{
 }}
 
 /* Sidebar navigation buttons */
-.nav-btn {
+.nav-btn {{
     width: 100%;
     text-align: left;
     padding: 8px 12px;
@@ -278,18 +278,18 @@ div[data-testid="stExpander"] {{
     display: flex;
     align-items: center;
     justify-content: space-between;
-}
+}}
 
 /* Wall Street Terminal Styling */
-.terminal-ticker {
+.terminal-ticker {{
     font-family: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace !important;
     font-size: 1.85rem !important;
     font-weight: 700 !important;
     letter-spacing: -0.03em !important;
     line-height: 1.2 !important;
-}
+}}
 
-.terminal-pill-green {
+.terminal-pill-green {{
     background-color: rgba(16, 185, 129, 0.12);
     color: #10B981;
     font-family: 'JetBrains Mono', Consolas, monospace;
@@ -298,9 +298,9 @@ div[data-testid="stExpander"] {{
     padding: 3px 8px;
     border-radius: 4px;
     display: inline-block;
-}
+}}
 
-.terminal-pill-amber {
+.terminal-pill-amber {{
     background-color: rgba(245, 158, 11, 0.12);
     color: #F59E0B;
     font-family: 'JetBrains Mono', Consolas, monospace;
@@ -309,9 +309,9 @@ div[data-testid="stExpander"] {{
     padding: 3px 8px;
     border-radius: 4px;
     display: inline-block;
-}
+}}
 
-.terminal-pill-blue {
+.terminal-pill-blue {{
     background-color: rgba(59, 130, 246, 0.12);
     color: #3B82F6;
     font-family: 'JetBrains Mono', Consolas, monospace;
@@ -320,7 +320,7 @@ div[data-testid="stExpander"] {{
     padding: 3px 8px;
     border-radius: 4px;
     display: inline-block;
-}
+}}
 </style>
 """
 
