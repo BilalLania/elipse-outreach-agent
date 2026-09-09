@@ -6,6 +6,7 @@ Luxury editorial design matching reference specifications with Dark/Light theme 
 import os
 import io
 import csv
+import textwrap
 import urllib.parse
 from datetime import datetime, date
 from dotenv import load_dotenv
@@ -14,6 +15,9 @@ import streamlit as st
 import db
 import agent_core
 import team_analytics
+
+def clean_html(html_str: str) -> str:
+    return textwrap.dedent(html_str).strip()
 
 load_dotenv()
 
@@ -691,7 +695,7 @@ if st.session_state["active_tab"] == "Today":
     tq_c1, tq_c2 = st.columns([4, 1.2])
     with tq_c1:
         st.markdown(
-            f"""
+            clean_html(f"""
             <div class="crm-card" style="padding: 1rem 1.25rem; border-left: 4px solid #10B981; margin-bottom: 1rem;">
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span class="terminal-pill-green">⚡ SALES FLOOR DESK</span>
@@ -701,7 +705,7 @@ if st.session_state["active_tab"] == "Today":
                     {tq['attempts']:,} Dials &nbsp;·&nbsp; {tq['live_interactions']} Live Calls &nbsp;·&nbsp; <span style="color:#10B981;">{tq['meetings_scheduled']} Meetings Booked</span> &nbsp;·&nbsp; <span style="color:{ACCENT_COLOR};">${tq['pipeline_value']:,.0f} Pipeline</span>
                 </div>
             </div>
-            """,
+            """),
             unsafe_allow_html=True,
         )
     with tq_c2:
@@ -776,12 +780,12 @@ elif st.session_state["active_tab"] == "Sales Terminal":
     with head_c2:
         sync_badge = "🟢 LIVE GOOGLE SHEET SYNC" if team_data.get("is_live") else "🟡 CACHED BASELINE"
         st.markdown(
-            f"""
+            clean_html(f"""
             <div style='text-align:right; margin-bottom: 6px;'>
                 <span class='terminal-pill-green'>{sync_badge}</span><br>
                 <span style='font-size:0.75rem; color:{TEXT_MUTED};'>Updated: {team_data.get('synced_at')}</span>
             </div>
-            """,
+            """),
             unsafe_allow_html=True,
         )
         sync_btn_col1, sync_btn_col2 = st.columns([1, 1])
@@ -827,60 +831,60 @@ elif st.session_state["active_tab"] == "Sales Terminal":
     # 5-Column High-Density Wall Street Ticker Matrix
     m_c1, m_c2, m_c3, m_c4, m_c5 = st.columns(5)
     with m_c1:
-        st.markdown(f"""
+        st.markdown(clean_html(f"""
         <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem;">
             <div class="metric-label">OUTREACH ATTEMPTS</div>
             <div class="terminal-ticker" style="color:{TEXT_COLOR};">{active_set['attempts']:,}</div>
             <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-amber">{active_set['avg_dials_day']} / day</span> avg pace</div>
             <div style="font-size:0.75rem; color:{TEXT_MUTED}; margin-top:6px;">{active_set.get('companies_worked', 0)} companies worked</div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
     with m_c2:
-        st.markdown(f"""
+        st.markdown(clean_html(f"""
         <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem;">
             <div class="metric-label">CONTACTS REACHED</div>
             <div class="terminal-ticker" style="color:{TEXT_COLOR};">{active_set['contacts_reached']:,}</div>
             <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-blue">{active_set['contact_rate_pct']}%</span> pickup rate</div>
             <div style="font-size:0.75rem; color:{TEXT_MUTED}; margin-top:6px;">{active_set.get('dead_dials', 0)} bad / dead dials</div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
     with m_c3:
-        st.markdown(f"""
+        st.markdown(clean_html(f"""
         <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem;">
             <div class="metric-label">LIVE CONVERSATIONS</div>
             <div class="terminal-ticker" style="color:{TEXT_COLOR};">{active_set['live_interactions']:,}</div>
             <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-green">{active_set['connect_to_conv_pct']}%</span> connect rate</div>
             <div style="font-size:0.75rem; color:{TEXT_MUTED}; margin-top:6px;">Direct decision discussions</div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
     with m_c4:
-        st.markdown(f"""
+        st.markdown(clean_html(f"""
         <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem;">
             <div class="metric-label">EXPLICIT INTEREST</div>
             <div class="terminal-ticker" style="color:{TEXT_COLOR};">{active_set['explicit_interest']:,}</div>
             <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-green">{active_set['interest_rate_pct']}%</span> interest rate</div>
             <div style="font-size:0.75rem; color:{TEXT_MUTED}; margin-top:6px;">{active_set.get('followups', 0)} scheduled follow-ups</div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
     with m_c5:
-        st.markdown(f"""
+        st.markdown(clean_html(f"""
         <div class="crm-card" style="padding: 1.15rem; margin-bottom: 1rem; border: 1.5px solid {ACCENT_COLOR};">
             <div class="metric-label">MEETINGS BOOKED</div>
             <div class="terminal-ticker" style="color:{ACCENT_COLOR};">{active_set['meetings_scheduled']}</div>
             <div class="metric-sub" style="margin-top:4px;"><span class="terminal-pill-amber">{active_set['dials_per_meeting']:,.0f} dials</span> / meeting</div>
             <div style="font-size:0.75rem; font-weight:700; color:{TEXT_COLOR}; margin-top:6px;">${active_set['pipeline_value']:,.0f} Pipeline Value</div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
     # 2 Columns: Conversion Funnel & Weekly Velocity Comparison
     f_c1, f_c2 = st.columns([1.4, 1.6])
 
     with f_c1:
-        st.markdown(f"""
+        st.markdown(clean_html(f"""
         <div class="crm-card" style="padding: 1.25rem;">
             <div style="font-family:'Playfair Display', serif; font-size:1.15rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom:0.25rem;">
                 Conversion Funnel & Efficiency
@@ -929,10 +933,10 @@ elif st.session_state["active_tab"] == "Sales Terminal":
                 <div style="font-size:0.75rem; color:{TEXT_MUTED};">Conversion: 1 booked meeting every {active_set['dials_per_meeting']:,.0f} dials</div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
     with f_c2:
-        st.markdown(f"""
+        st.markdown(clean_html(f"""
         <div class="crm-card" style="padding: 1.25rem;">
             <div style="font-family:'Playfair Display', serif; font-size:1.15rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom:0.25rem;">
                 Weekly Velocity & Sprint Momentum
@@ -941,7 +945,7 @@ elif st.session_state["active_tab"] == "Sales Terminal":
                 Sprint-over-sprint tracking across all 3 weeks of team execution.
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
         for w in team_data["weeks"]:
             with st.expander(f"📅 **{w['title']} ({w['dates']})** — {w['attempts']:,} Dials · {w['live_interactions']} Live Calls · **{w['meetings_scheduled']} Meetings**", expanded=(w["week_id"] == "week_3")):
@@ -956,7 +960,7 @@ elif st.session_state["active_tab"] == "Sales Terminal":
                     st.metric("Meetings Booked", f"{w['meetings_scheduled']}", f"${w['pipeline_value']:,.0f} val")
 
         # Telephony & Call Outcome Breakdown Card
-        st.markdown(f"""
+        st.markdown(clean_html(f"""
         <div class="crm-card" style="padding: 1.25rem; margin-top: 1rem;">
             <div style="font-family:'Playfair Display', serif; font-size:1.05rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom:0.25rem;">
                 Telephony & Call Friction Analysis
@@ -983,7 +987,7 @@ elif st.session_state["active_tab"] == "Sales Terminal":
                 </div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
     # Google Sheets Connection Settings
     with st.expander("⚙️ **Google Sheets Live Ingestion Settings**"):
