@@ -125,6 +125,18 @@ def init_db():
             )
         """)
 
+        # Create sales problem discussion comments table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS problem_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                problem_id INTEGER NOT NULL,
+                author_name TEXT NOT NULL,
+                comment_text TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(problem_id) REFERENCES sales_problems(id) ON DELETE CASCADE
+            )
+        """)
+
     seed_or_update_core_leads()
     seed_initial_problems()
     normalize_lead_categories()
@@ -196,7 +208,41 @@ def update_sales_problem_status(problem_id, new_status):
 
 def delete_sales_problem(problem_id):
     with get_conn() as conn:
+        conn.execute("DELETE FROM problem_comments WHERE problem_id = ?", (problem_id,))
         conn.execute("DELETE FROM sales_problems WHERE id = ?", (problem_id,))
+
+
+def add_problem_comment(problem_id: int, author_name: str, comment_text: str):
+    """Adds a reply / solution comment to a sales problem thread."""
+    now = datetime.now().isoformat(timespec="seconds")
+    author = author_name.strip() or "Sales Rep"
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO problem_comments (problem_id, author_name, comment_text, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (problem_id, author, comment_text.strip(), now),
+        )
+        return cur.lastrowid
+
+
+def get_problem_comments(problem_id: int = None):
+    """Fetches discussion comments for a problem, or all comments."""
+    with get_conn() as conn:
+        if problem_id is not None:
+            rows = conn.execute(
+                "SELECT * FROM problem_comments WHERE problem_id = ? ORDER BY id ASC",
+                (problem_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM problem_comments ORDER BY id ASC"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_problem_comment(comment_id: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM problem_comments WHERE id = ?", (comment_id,))
 
 
 VERIFIED_SAMPLE_LEADS = [

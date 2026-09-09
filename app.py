@@ -83,30 +83,30 @@ is_dark = st.session_state["theme"] == "dark"
 
 # Theme Palette Variables
 if is_dark:
-    BG_COLOR = "#121316"
-    CARD_BG = "#1A1C22"
-    CARD_BORDER = "#2A2D37"
-    TEXT_COLOR = "#F4F3EE"
-    TEXT_MUTED = "#8E929E"
-    ACCENT_COLOR = "#D9653B"
-    ACCENT_HOVER = "#E07A54"
-    TAG_BG = "#242731"
-    INPUT_BG = "#181A20"
-    SIDEBAR_BG = "#0D0E11"
-    METRIC_BORDER = "#2D303B"
-    BADGE_COLOR = "#E65A40"
+    BG_COLOR = "#0D0F12"
+    CARD_BG = "#161920"
+    CARD_BORDER = "#262B36"
+    TEXT_COLOR = "#F8FAFC"
+    TEXT_MUTED = "#94A3B8"
+    ACCENT_COLOR = "#E06842"
+    ACCENT_HOVER = "#EA7A56"
+    TAG_BG = "#222733"
+    INPUT_BG = "#1C202A"
+    SIDEBAR_BG = "#0B0C0E"
+    METRIC_BORDER = "#262B36"
+    BADGE_COLOR = "#EF4444"
 else:
-    BG_COLOR = "#F9F8F5"
+    BG_COLOR = "#F8FAFC"
     CARD_BG = "#FFFFFF"
-    CARD_BORDER = "#E8E4DC"
-    TEXT_COLOR = "#1C1D21"
-    TEXT_MUTED = "#767982"
+    CARD_BORDER = "#E2E8F0"
+    TEXT_COLOR = "#0F172A"
+    TEXT_MUTED = "#64748B"
     ACCENT_COLOR = "#A84B2C"
     ACCENT_HOVER = "#B85736"
-    TAG_BG = "#F1EEE7"
+    TAG_BG = "#F1F5F9"
     INPUT_BG = "#FFFFFF"
-    SIDEBAR_BG = "#F4F2EC"
-    METRIC_BORDER = "#E6E2D8"
+    SIDEBAR_BG = "#F1F5F9"
+    METRIC_BORDER = "#E2E8F0"
     BADGE_COLOR = "#C94528"
 
 # ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ custom_css = f"""
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
 /* Global styles */
-html, body, [data-testid="stAppViewContainer"] {{
+html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
     background-color: {BG_COLOR} !important;
     color: {TEXT_COLOR} !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
@@ -128,11 +128,19 @@ html, body, [data-testid="stAppViewContainer"] {{
     border-right: 1px solid {CARD_BORDER} !important;
 }}
 
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label {{
+    color: {TEXT_COLOR} !important;
+}}
+
 /* Typography */
-h1, h2, h3, .serif-title {{
+h1, h2, h3, h4, h5, h6, .serif-title {{
     font-family: 'Playfair Display', 'Cormorant Garamond', Georgia, serif !important;
     color: {TEXT_COLOR} !important;
     letter-spacing: -0.02em;
+}}
+
+p, span, label, div {{
+    color: {TEXT_COLOR};
 }}
 
 .hero-heading {{
@@ -190,25 +198,22 @@ h1, h2, h3, .serif-title {{
     font-weight: 400;
 }}
 
-/* Metric Matrix Card */
-.metric-grid-container {{
+/* Custom Cards */
+.crm-card {{
     background-color: {CARD_BG};
     border: 1px solid {CARD_BORDER};
     border-radius: 12px;
-    padding: 1.5rem 1rem;
-    margin-bottom: 1.75rem;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    transition: all 0.2s ease;
 }}
 
-.metric-column {{
-    padding: 0.5rem 1.25rem;
-    border-right: 1px solid {METRIC_BORDER};
+.crm-card:hover {{
+    border-color: {ACCENT_COLOR};
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
 }}
 
-.metric-column:last-child {{
-    border-right: none;
-}}
-
+/* Metric Cards */
 .metric-label {{
     font-size: 0.72rem;
     font-weight: 700;
@@ -230,21 +235,6 @@ h1, h2, h3, .serif-title {{
 .metric-sub {{
     font-size: 0.8rem;
     color: {TEXT_MUTED};
-}}
-
-/* Custom Cards */
-.crm-card {{
-    background-color: {CARD_BG};
-    border: 1px solid {CARD_BORDER};
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-    transition: all 0.2s ease;
-}}
-
-.crm-card:hover {{
-    border-color: {ACCENT_COLOR};
-    box-shadow: 0 4px 16px rgba(0,0,0,0.04);
 }}
 
 /* Badges and Tags */
@@ -271,7 +261,7 @@ h1, h2, h3, .serif-title {{
     margin-left: 6px;
 }}
 
-/* Primary Buttons */
+/* Buttons */
 div.stButton > button[kind="primary"] {{
     background-color: {ACCENT_COLOR} !important;
     color: white !important;
@@ -287,15 +277,81 @@ div.stButton > button[kind="primary"]:hover {{
     background-color: {ACCENT_HOVER} !important;
 }}
 
-/* Form elements */
-div[data-baseweb="input"], div[data-baseweb="textarea"], div[data-baseweb="select"] {{
+div.stButton > button[kind="secondary"] {{
+    background-color: {CARD_BG} !important;
+    color: {TEXT_COLOR} !important;
+    border: 1px solid {CARD_BORDER} !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+    transition: all 0.2s ease !important;
+}}
+
+div.stButton > button[kind="secondary"]:hover {{
+    border-color: {ACCENT_COLOR} !important;
+    color: {ACCENT_COLOR} !important;
+}}
+
+/* Form elements & Inputs */
+div[data-baseweb="input"],
+div[data-baseweb="base-input"],
+div[data-baseweb="textarea"] {{
     background-color: {INPUT_BG} !important;
-    border-color: {CARD_BORDER} !important;
+    border: 1px solid {CARD_BORDER} !important;
+    border-radius: 8px !important;
+}}
+
+input, textarea, select {{
+    color: {TEXT_COLOR} !important;
+    -webkit-text-fill-color: {TEXT_COLOR} !important;
+    background-color: transparent !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+}}
+
+input::placeholder, textarea::placeholder {{
+    color: {TEXT_MUTED} !important;
+    -webkit-text-fill-color: {TEXT_MUTED} !important;
+    opacity: 0.75 !important;
+}}
+
+div[data-testid="stWidgetLabel"] label,
+div[data-testid="stWidgetLabel"] p {{
+    color: {TEXT_COLOR} !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+}}
+
+/* Selectbox & Popovers */
+div[data-baseweb="select"] > div {{
+    background-color: {INPUT_BG} !important;
+    border: 1px solid {CARD_BORDER} !important;
     color: {TEXT_COLOR} !important;
     border-radius: 8px !important;
 }}
 
-/* Streamlit Expander clean styling */
+div[data-baseweb="select"] span {{
+    color: {TEXT_COLOR} !important;
+}}
+
+div[data-baseweb="popover"],
+div[data-baseweb="menu"],
+ul[data-baseweb="menu"] {{
+    background-color: {CARD_BG} !important;
+    border: 1px solid {CARD_BORDER} !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+}}
+
+li[data-baseweb="menu-item"] {{
+    color: {TEXT_COLOR} !important;
+    background-color: {CARD_BG} !important;
+}}
+
+li[data-baseweb="menu-item"]:hover {{
+    background-color: {TAG_BG} !important;
+    color: {ACCENT_COLOR} !important;
+}}
+
+/* Expanders */
 div[data-testid="stExpander"] {{
     background-color: {CARD_BG} !important;
     border: 1px solid {CARD_BORDER} !important;
@@ -303,19 +359,29 @@ div[data-testid="stExpander"] {{
     margin-bottom: 0.75rem !important;
 }}
 
-/* Sidebar navigation buttons */
-.nav-btn {{
-    width: 100%;
-    text-align: left;
-    padding: 8px 12px;
-    border-radius: 6px;
-    margin-bottom: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+div[data-testid="stExpander"] summary p,
+div[data-testid="stExpander"] summary span {{
+    color: {TEXT_COLOR} !important;
+    font-weight: 600 !important;
 }}
 
-/* Wall Street Terminal Styling */
+/* Pills & Segmented Controls */
+div[data-testid="stPills"] button,
+div[data-testid="stSegmentedControl"] button {{
+    background-color: {CARD_BG} !important;
+    color: {TEXT_COLOR} !important;
+    border: 1px solid {CARD_BORDER} !important;
+    font-weight: 600 !important;
+}}
+
+div[data-testid="stPills"] button[aria-checked="true"],
+div[data-testid="stSegmentedControl"] button[aria-checked="true"] {{
+    background-color: {ACCENT_COLOR} !important;
+    color: white !important;
+    border-color: {ACCENT_COLOR} !important;
+}}
+
+/* Terminal Tickers & Badges */
 .terminal-ticker {{
     font-family: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace !important;
     font-size: 1.85rem !important;
@@ -325,7 +391,7 @@ div[data-testid="stExpander"] {{
 }}
 
 .terminal-pill-green {{
-    background-color: rgba(16, 185, 129, 0.12);
+    background-color: rgba(16, 185, 129, 0.14);
     color: #10B981;
     font-family: 'JetBrains Mono', Consolas, monospace;
     font-size: 0.72rem;
@@ -336,7 +402,7 @@ div[data-testid="stExpander"] {{
 }}
 
 .terminal-pill-amber {{
-    background-color: rgba(245, 158, 11, 0.12);
+    background-color: rgba(245, 158, 11, 0.14);
     color: #F59E0B;
     font-family: 'JetBrains Mono', Consolas, monospace;
     font-size: 0.72rem;
@@ -347,7 +413,7 @@ div[data-testid="stExpander"] {{
 }}
 
 .terminal-pill-blue {{
-    background-color: rgba(59, 130, 246, 0.12);
+    background-color: rgba(59, 130, 246, 0.14);
     color: #3B82F6;
     font-family: 'JetBrains Mono', Consolas, monospace;
     font-size: 0.72rem;
@@ -355,6 +421,44 @@ div[data-testid="stExpander"] {{
     padding: 3px 8px;
     border-radius: 4px;
     display: inline-block;
+}}
+
+/* Streamlit Container Border styling for cards */
+div[data-testid="stVerticalBlockBorderWrapper"] {{
+    background-color: {CARD_BG} !important;
+    border-color: {CARD_BORDER} !important;
+    border-radius: 12px !important;
+}}
+
+div[data-testid="stVerticalBlockBorderWrapper"] > div {{
+    background-color: {CARD_BG} !important;
+    border-color: {CARD_BORDER} !important;
+    border-radius: 12px !important;
+}}
+
+/* Discussion Comment Cards */
+.comment-card {{
+    background-color: {TAG_BG};
+    border-left: 3px solid {ACCENT_COLOR};
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+}}
+.comment-author {{
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: {TEXT_COLOR};
+}}
+.comment-time {{
+    font-size: 0.72rem;
+    color: {TEXT_MUTED};
+    margin-left: 6px;
+}}
+.comment-body {{
+    font-size: 0.88rem;
+    color: {TEXT_COLOR};
+    margin-top: 4px;
+    line-height: 1.45;
 }}
 </style>
 """
@@ -750,6 +854,54 @@ def render_sales_problems_ui(key_prefix: str = "today", default_expanded: bool =
                 if st.button("🗑️ Delete", key=f"{key_prefix}_del_{p['id']}", use_container_width=True):
                     db.delete_sales_problem(p["id"])
                     st.rerun()
+
+            # Collaborative Discussion & Solution Thread
+            comments = db.get_problem_comments(p["id"])
+            comm_count = len(comments)
+            exp_label = f"💬 Team Discussion & Solutions ({comm_count})" if comm_count > 0 else "💬 Add Discussion / Proposed Solution"
+            with st.expander(exp_label, expanded=(comm_count > 0)):
+                if comments:
+                    for c in comments:
+                        c_auth = c.get("author_name") or "Team Member"
+                        c_date = c.get("created_at", "")[:16].replace("T", " ")
+                        c_body = c.get("comment_text", "")
+                        st.markdown(
+                            clean_html(f"""
+                            <div class="comment-card">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <div>
+                                        <span class="comment-author">👤 {c_auth}</span>
+                                        <span class="comment-time">· {c_date}</span>
+                                    </div>
+                                </div>
+                                <div class="comment-body">{c_body}</div>
+                            </div>
+                            """),
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.caption("No discussions yet. Share your thoughts, objection rebuttals, or solutions below!")
+
+                # Post a reply form
+                with st.form(key=f"rep_form_{key_prefix}_{p['id']}"):
+                    f_col1, f_col2 = st.columns([1.3, 3])
+                    with f_col1:
+                        def_author = st.session_state.get("user_author_name", "Bilal")
+                        reply_author = st.text_input("Your Name", value=def_author, key=f"inp_auth_{key_prefix}_{p['id']}", placeholder="e.g. Bilal, Sarah, Rep")
+                    with f_col2:
+                        reply_body = st.text_area("Your Input / Solution / Playbook", placeholder="Write response or solution here...", key=f"inp_msg_{key_prefix}_{p['id']}", height=68)
+
+                    btn_post = st.form_submit_button("💬 Post Response", type="primary")
+                    if btn_post:
+                        if reply_body.strip():
+                            chosen_name = reply_author.strip() or "Sales Team"
+                            st.session_state["user_author_name"] = chosen_name
+                            db.add_problem_comment(p["id"], chosen_name, reply_body.strip())
+                            st.success(f"Response logged by {chosen_name}!")
+                            st.rerun()
+                        else:
+                            st.warning("Please enter your thoughts or solution before posting.")
+
 
 
 # ---------------------------------------------------------------------------
@@ -1367,33 +1519,32 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                 phone_badge = '<span style="background:rgba(239,68,68,0.12); color:#EF4444; font-size:0.72rem; font-weight:700; padding:3px 8px; border-radius:4px;">⚪ Needs Direct Line</span>'
                 card_border_color = CARD_BORDER
 
-            with st.container():
+            with st.container(border=True):
+                # Header row
                 st.markdown(clean_html(f"""
-                <div class="crm-card" style="padding: 1.25rem 1.4rem; margin-bottom: 1.25rem; border-left: 4px solid {card_border_color};">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
-                        <div>
-                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                <span style="font-family:'Playfair Display', serif; font-size:1.3rem; font-weight:700; color:{TEXT_COLOR};">{comp_name}</span>
-                                <span style="font-family:'JetBrains Mono', monospace; font-size:0.82rem; font-weight:700; color:{ACCENT_COLOR};">${deal_val:,.0f}</span>
-                                {phone_badge}
-                                <span style="font-size:0.75rem; color:{TEXT_MUTED}; background:{INPUT_BG}; padding:2px 8px; border-radius:4px;">{tag}</span>
-                            </div>
-                            <div style="font-size:0.9rem; color:{TEXT_COLOR}; margin-top:3px;">
-                                👤 <b>{c_name}</b> · <i>{c_role}</i>
-                            </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid {CARD_BORDER};">
+                    <div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="font-family:'Playfair Display', serif; font-size:1.35rem; font-weight:700; color:{TEXT_COLOR};">{comp_name}</span>
+                            <span style="font-family:'JetBrains Mono', monospace; font-size:0.85rem; font-weight:700; color:{ACCENT_COLOR}; background:{TAG_BG}; padding:2px 8px; border-radius:4px;">${deal_val:,.0f}</span>
+                            {phone_badge}
+                            <span style="font-size:0.75rem; color:{TEXT_MUTED}; background:{INPUT_BG}; border:1px solid {CARD_BORDER}; padding:2px 8px; border-radius:4px;">{tag}</span>
+                        </div>
+                        <div style="font-size:0.9rem; color:{TEXT_COLOR}; margin-top:4px;">
+                            👤 <b>{c_name}</b> · <span style="color:{TEXT_MUTED};">{c_role}</span>
                         </div>
                     </div>
                 </div>
                 """), unsafe_allow_html=True)
 
                 # Two Columns: Channel/Dialer & On-Screen Script
-                col_dialer, col_battlecard = st.columns([1.3, 2.2])
+                col_dialer, col_battlecard = st.columns([1.2, 2.0], gap="medium")
 
                 with col_dialer:
                     st.markdown("##### 📞 Direct Outbound Line")
                     if c_phone:
                         st.markdown(
-                            f'<a href="tel:{c_phone}" style="display:block; text-align:center; padding:12px 14px; background:#10B981; color:white; font-family:monospace; font-weight:700; font-size:1.15rem; border-radius:8px; text-decoration:none; margin-bottom:8px; box-shadow: 0 2px 8px rgba(16,185,129,0.25);">📞 Call {c_phone}</a>',
+                            f'<a href="tel:{c_phone}" style="display:block; text-align:center; padding:11px 14px; background:#10B981; color:white; font-family:monospace; font-weight:700; font-size:1.15rem; border-radius:8px; text-decoration:none; margin-bottom:8px; box-shadow: 0 2px 8px rgba(16,185,129,0.25);">📞 Call {c_phone}</a>',
                             unsafe_allow_html=True,
                         )
                     else:
@@ -1402,8 +1553,8 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     # LinkedIn Research & Apollo Phone Reveal
                     render_linkedin_research_and_reveal_ui(lead, key_prefix=f"cc_{lead_id}")
 
-                    # Quick Phone & LinkedIn Profile Editor
-                    with st.expander("✏️ Update Phone / LinkedIn Profile", expanded=(not c_phone)):
+                    # Quick Phone & LinkedIn Profile Editor (collapsed by default)
+                    with st.expander("✏️ Edit Phone / LinkedIn", expanded=False):
                         edit_ph = st.text_input("Direct Phone", value=c_phone, key=f"quick_p_{lead_id}", placeholder="+1 (555) 000-0000")
                         edit_li = st.text_input("LinkedIn Profile URL", value=c_li, key=f"quick_li_{lead_id}", placeholder="https://www.linkedin.com/in/...")
                         if st.button("💾 Save Contact Info", key=f"save_ci_{lead_id}"):
@@ -1436,9 +1587,8 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     render_hunter_decision_makers_ui(lead, key_prefix="cc_desk")
 
                     # How We Can Help Box
-                    st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
                     st.markdown(clean_html(f"""
-                    <div style="background:{INPUT_BG}; border-left:3px solid {ACCENT_COLOR}; padding:8px 12px; border-radius:0 6px 6px 0; font-size:0.8rem; color:{TEXT_MUTED}; margin-top:6px;">
+                    <div style="background:{INPUT_BG}; border-left:3px solid {ACCENT_COLOR}; padding:8px 12px; border-radius:0 6px 6px 0; font-size:0.8rem; color:{TEXT_MUTED}; margin-top:8px;">
                         <strong style="color:{TEXT_COLOR};">Why Elipse Studio Helps:</strong><br>
                         {lead.get('reason') or 'High-ticket custom catalog converts higher with real-time 3D web builder.'}
                     </div>
@@ -1447,7 +1597,7 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                 with col_battlecard:
                     st.markdown("##### 🎯 Live 20-Second Phone Script (Read Verbatim)")
                     st.markdown(clean_html(f"""
-                    <div style="background:{CARD_BG}; border:1.5px solid {ACCENT_COLOR}; padding:14px 16px; border-radius:8px; font-size:0.95rem; line-height:1.55; color:{TEXT_COLOR}; margin-bottom:12px; font-family:'Plus Jakarta Sans', sans-serif;">
+                    <div style="background:{TAG_BG}; border:1.5px solid {ACCENT_COLOR}; padding:14px 16px; border-radius:8px; font-size:0.95rem; line-height:1.55; color:{TEXT_COLOR}; margin-bottom:12px; font-family:'Plus Jakarta Sans', sans-serif;">
                         "{script}"
                     </div>
                     """), unsafe_allow_html=True)
@@ -1459,7 +1609,7 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     rep_call_note = st.text_input("Call Notes / Follow-up Details", placeholder="Spoke with receptionist, Hal returns at 3 PM...", key=f"cnote_{lead_id}")
 
                     # 1-Click Speed Dispositions Bar
-                    st.markdown("<div style='font-size:0.75rem; font-weight:700; color:" + TEXT_MUTED + "; text-transform:uppercase; margin-bottom:6px;'>⚡ 1-Click Call Outcome Dispositions</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size:0.75rem; font-weight:700; color:" + TEXT_MUTED + "; text-transform:uppercase; margin-bottom:6px; margin-top:8px;'>⚡ 1-Click Call Outcome Dispositions</div>", unsafe_allow_html=True)
                     disp_cols = st.columns(5)
 
                     with disp_cols[0]:
@@ -1492,8 +1642,6 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                             st.balloons()
                             st.success(f"🎉 BOOM! Meeting booked for {comp_name} (${deal_val:,.0f})!")
                             st.rerun()
-
-                st.markdown("<hr style='border:none; border-top:1px solid " + CARD_BORDER + "; margin:20px 0;'>", unsafe_allow_html=True)
 
 
 
