@@ -684,14 +684,37 @@ if st.session_state["active_tab"] == "Today":
         unsafe_allow_html=True,
     )
 
-    # -----------------------------------------------------------------------
-    # SALES TEAM PROBLEM DESK // PRIORITY TRACKER
-    # -----------------------------------------------------------------------
+    # 1. LIVE SALES FLOOR TICKER BANNER AT THE VERY TOP
+    team_data_quick = team_analytics.fetch_team_metrics(st.session_state.get("sheet_url", team_analytics.DEFAULT_GOOGLE_SHEET_URL))
+    tq = team_data_quick["total"]
+    tq_c1, tq_c2 = st.columns([4, 1.2])
+    with tq_c1:
+        st.markdown(
+            clean_html(f"""
+            <div class="crm-card" style="padding: 1rem 1.25rem; border-left: 4px solid #10B981; margin-bottom: 1.25rem;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="terminal-pill-green">⚡ SALES FLOOR DESK</span>
+                    <span style="font-size:0.75rem; color:{TEXT_MUTED};">Live Sprint Velocity</span>
+                </div>
+                <div style="font-family:'JetBrains Mono', monospace; font-size:1.1rem; font-weight:700; color:{TEXT_COLOR}; margin-top:4px;">
+                    {tq['attempts']:,} Dials &nbsp;·&nbsp; {tq['live_interactions']} Live Calls &nbsp;·&nbsp; <span style="color:#10B981;">{tq['meetings_scheduled']} Meetings Booked</span> &nbsp;·&nbsp; <span style="color:{ACCENT_COLOR};">${tq['pipeline_value']:,.0f} Pipeline</span>
+                </div>
+            </div>
+            """),
+            unsafe_allow_html=True,
+        )
+    with tq_c2:
+        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
+        if st.button("📊 Open Sales Terminal", key="goto_terminal_btn", use_container_width=True, type="primary"):
+            st.session_state["active_tab"] = "Sales Terminal"
+            st.rerun()
+
+    # 2. SALES TEAM PROBLEM DESK // PRIORITY TRACKER
     render_sales_problems_ui(key_prefix="today", default_expanded=False)
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-    # 4-Column Stat Matrix Card
+    # 3. 4-COLUMN STAT MATRIX CARD
     pipeline_val_fmt = f"${metrics.get('pipeline_value', 0):,.0f}"
     won_val_fmt = f"${metrics.get('won_this_month', 0):,.0f}"
     active_opps = metrics.get("active_opportunities", 0)
@@ -746,46 +769,6 @@ if st.session_state["active_tab"] == "Today":
             """,
             unsafe_allow_html=True,
         )
-
-    # Live Sales Floor Ticker Banner on Today View
-    team_data_quick = team_analytics.fetch_team_metrics(st.session_state.get("sheet_url", team_analytics.DEFAULT_GOOGLE_SHEET_URL))
-    tq = team_data_quick["total"]
-    tq_c1, tq_c2 = st.columns([4, 1.2])
-    with tq_c1:
-        st.markdown(
-            clean_html(f"""
-            <div class="crm-card" style="padding: 1rem 1.25rem; border-left: 4px solid #10B981; margin-bottom: 1rem;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="terminal-pill-green">⚡ SALES FLOOR DESK</span>
-                    <span style="font-size:0.75rem; color:{TEXT_MUTED};">Live Sprint Velocity</span>
-                </div>
-                <div style="font-family:'JetBrains Mono', monospace; font-size:1.1rem; font-weight:700; color:{TEXT_COLOR}; margin-top:4px;">
-                    {tq['attempts']:,} Dials &nbsp;·&nbsp; {tq['live_interactions']} Live Calls &nbsp;·&nbsp; <span style="color:#10B981;">{tq['meetings_scheduled']} Meetings Booked</span> &nbsp;·&nbsp; <span style="color:{ACCENT_COLOR};">${tq['pipeline_value']:,.0f} Pipeline</span>
-                </div>
-            </div>
-            """),
-            unsafe_allow_html=True,
-        )
-    with tq_c2:
-        st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
-        if st.button("📊 Open Sales Terminal", key="goto_terminal_btn", use_container_width=True, type="primary"):
-            st.session_state["active_tab"] = "Sales Terminal"
-            st.rerun()
-
-    # Pipeline at a Glance Card
-    st.markdown(
-        f"""
-        <div class="crm-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.5rem;">
-                <div class="date-eyebrow" style="margin-bottom:0;">PIPELINE AT A GLANCE</div>
-            </div>
-            <div style="font-family:'Playfair Display', serif; font-size:1.8rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom:1rem;">
-                Keep momentum moving
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     # Recent Leads requiring action
     recent_leads = db.get_all_leads()[:5]
