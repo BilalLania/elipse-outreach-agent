@@ -98,7 +98,91 @@ def init_db():
             WHERE pipeline_stage IS NULL OR pipeline_stage = ''
         """)
 
+        # Create sales problems tracker table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS sales_problems (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                priority TEXT NOT NULL DEFAULT 'High Priority',
+                reported_by TEXT DEFAULT 'Sales Team',
+                status TEXT NOT NULL DEFAULT 'Open',
+                created_at TEXT NOT NULL,
+                resolved_at TEXT
+            )
+        """)
+
     seed_or_update_core_leads()
+    seed_initial_problems()
+
+
+def seed_initial_problems():
+    with get_conn() as conn:
+        count = conn.execute("SELECT COUNT(*) as c FROM sales_problems").fetchone()["c"]
+        if count == 0:
+            now = datetime.now().isoformat(timespec="seconds")
+            conn.execute(
+                """INSERT INTO sales_problems (title, description, priority, reported_by, status, created_at)
+                   VALUES (?, ?, ?, ?, 'Open', ?)""",
+                (
+                    "High dead/disconnected number rate (686 bad dials in 3 weeks)",
+                    "Our outbound list has a ~23% dead-dial rate. Sales reps are burning dials on disconnected numbers. Need pre-scrubbed direct phone numbers.",
+                    "High Priority",
+                    "Outbound Sales Desk",
+                    now,
+                ),
+            )
+            conn.execute(
+                """INSERT INTO sales_problems (title, description, priority, reported_by, status, created_at)
+                   VALUES (?, ?, ?, ?, 'Open', ?)""",
+                (
+                    "Need 1-click live 3D showroom link for hot phone prospects",
+                    "When custom cart and yacht prospects express interest on the phone, they ask to see a live demo immediately. Need a short interactive WebGL demo URL ready to SMS/email.",
+                    "Normal Priority",
+                    "Account Executive",
+                    now,
+                ),
+            )
+
+
+def add_sales_problem(title, description="", priority="High Priority", reported_by="Sales Team"):
+    now = datetime.now().isoformat(timespec="seconds")
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO sales_problems (title, description, priority, reported_by, status, created_at)
+               VALUES (?, ?, ?, ?, 'Open', ?)""",
+            (title, description, priority, reported_by, now),
+        )
+        return cur.lastrowid
+
+
+def get_sales_problems(priority_filter="all", status_filter="Open"):
+    with get_conn() as conn:
+        query = "SELECT * FROM sales_problems WHERE 1=1"
+        params = []
+        if status_filter != "all":
+            query += " AND status = ?"
+            params.append(status_filter)
+        if priority_filter != "all":
+            query += " AND priority = ?"
+            params.append(priority_filter)
+        query += " ORDER BY CASE WHEN priority = 'High Priority' THEN 0 ELSE 1 END, id DESC"
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_sales_problem_status(problem_id, new_status):
+    now = datetime.now().isoformat(timespec="seconds") if new_status == "Resolved" else None
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE sales_problems SET status = ?, resolved_at = ? WHERE id = ?",
+            (new_status, now, problem_id),
+        )
+
+
+def delete_sales_problem(problem_id):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sales_problems WHERE id = ?", (problem_id,))
 
 
 VERIFIED_SAMPLE_LEADS = [

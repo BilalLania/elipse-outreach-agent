@@ -350,12 +350,12 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="date-eyebrow">WORKSPACE</div>', unsafe_allow_html=True)
-
     # Navigation menu
+    open_problems_count = len(db.get_sales_problems(status_filter="Open"))
     nav_options = [
         ("Today", "⊞", 0),
         ("Sales Terminal", "⚡", 0),
+        ("Problem Desk", "🎯", open_problems_count),
         ("Pipeline", "💼", metrics.get("active_opportunities", 0)),
         ("Contacts", "👥", metrics.get("total_leads", 0)),
         ("Follow-ups", "📅", metrics.get("followups_due", 0)),
@@ -363,10 +363,10 @@ with st.sidebar:
     ]
 
     for name, icon, count in nav_options:
-        badge_html = f'<span class="badge-count">{count}</span>' if count > 0 and name == "Follow-ups" else ""
+        badge_html = f'<span class="badge-count">{count}</span>' if count > 0 and name in ["Follow-ups", "Problem Desk"] else ""
         is_selected = st.session_state["active_tab"] == name
         btn_label = f"{icon}  {name}"
-        if count > 0 and name == "Follow-ups":
+        if count > 0 and name in ["Follow-ups", "Problem Desk"]:
             btn_label = f"{icon}  {name} ({count})"
 
         if st.button(
@@ -520,6 +520,150 @@ def render_hunter_decision_makers_ui(lead, key_prefix="today"):
         st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_sales_problems_ui(key_prefix: str = "today", default_expanded: bool = False):
+    """Renders the Sales Team Priority & Problem Desk with High Priority & Normal Priority tracking."""
+    problems_open = db.get_sales_problems(status_filter="Open")
+    high_count = sum(1 for p in problems_open if p.get("priority") == "High Priority")
+    normal_count = sum(1 for p in problems_open if p.get("priority") == "Normal Priority")
+
+    st.markdown(
+        clean_html(f"""
+        <div class="crm-card" style="padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; border-left: 4px solid #EF4444;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <div class="date-eyebrow" style="margin-bottom: 0.25rem;">SALES TEAM BOTTLENECKS & CHALLENGES</div>
+                    <div style="font-family:'Playfair Display', serif; font-size:1.35rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom: 0.2rem;">
+                        Sales Problem Desk // Priority Tracker
+                    </div>
+                    <div style="font-size: 0.85rem; color:{TEXT_MUTED};">
+                        Sales team logs top-priority roadblocks, objections, and process hurdles that need immediate solving.
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <span style="background:rgba(239, 68, 68, 0.15); color:#EF4444; font-weight:700; font-family:'JetBrains Mono', monospace; padding:4px 10px; border-radius:6px; font-size:0.8rem;">
+                        🔴 {high_count} High Priority
+                    </span>
+                    <span style="background:rgba(245, 158, 11, 0.15); color:#F59E0B; font-weight:700; font-family:'JetBrains Mono', monospace; padding:4px 10px; border-radius:6px; font-size:0.8rem;">
+                        🟡 {normal_count} Normal Priority
+                    </span>
+                </div>
+            </div>
+        </div>
+        """),
+        unsafe_allow_html=True,
+    )
+
+    # Log New Problem Form
+    with st.expander("➕ **Log a Top-Priority Sales Problem**", expanded=default_expanded):
+        with st.form(f"{key_prefix}_prob_form"):
+            np_col1, np_col2 = st.columns([3, 1.5])
+            with np_col1:
+                p_title = st.text_input("Problem / Bottleneck Title", placeholder="e.g. Prospects asking for live 3D pricing before agreeing to meeting")
+            with np_col2:
+                p_prio = st.radio(
+                    "Priority",
+                    ["🔴 High Priority", "🟡 Normal Priority"],
+                    horizontal=True,
+                    help="High Priority = urgent blocker stopping deals/calls. Normal Priority = process or collateral improvement."
+                )
+
+            np_c3, np_c4 = st.columns([3, 1.5])
+            with np_c3:
+                p_desc = st.text_area("Details / Context / What needs to be solved", placeholder="Explain the exact objection, missing collateral, or list quality issue...", height=80)
+            with np_c4:
+                p_rep = st.text_input("Reported By", value="Sales Rep")
+
+            p_submit = st.form_submit_button("🚨 Submit Problem to Desk", type="primary", use_container_width=True)
+
+        if p_submit and p_title.strip():
+            clean_p = "High Priority" if "High" in p_prio else "Normal Priority"
+            db.add_sales_problem(
+                title=p_title.strip(),
+                description=p_desc.strip(),
+                priority=clean_p,
+                reported_by=p_rep.strip() or "Sales Team",
+            )
+            st.success("Logged problem successfully!")
+            st.rerun()
+
+    # Filter selector
+    filter_opts = ["All Open", "🔴 High Priority Only", "🟡 Normal Priority Only", "✅ Resolved Archive"]
+    f_prio = st.segmented_control(
+        "Priority Filter",
+        filter_opts,
+        default="All Open",
+        key=f"{key_prefix}_filter_prio",
+        label_visibility="collapsed",
+    ) if hasattr(st, "segmented_control") else st.radio(
+        "Priority Filter",
+        filter_opts,
+        horizontal=True,
+        key=f"{key_prefix}_filter_prio",
+        label_visibility="collapsed",
+    )
+
+    if f_prio == "✅ Resolved Archive":
+        items = db.get_sales_problems(status_filter="Resolved")
+    elif "High Priority" in f_prio:
+        items = db.get_sales_problems(priority_filter="High Priority", status_filter="Open")
+    elif "Normal Priority" in f_prio:
+        items = db.get_sales_problems(priority_filter="Normal Priority", status_filter="Open")
+    else:
+        items = db.get_sales_problems(status_filter="Open")
+
+    if not items:
+        st.info("No problems recorded in this category. All clear!")
+    else:
+        for p in items:
+            is_high = p.get("priority") == "High Priority"
+            border_c = "#EF4444" if is_high else "#F59E0B"
+            badge_markup = (
+                "<span style='background:rgba(239, 68, 68, 0.15); color:#EF4444; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;'>🔴 HIGH PRIORITY</span>"
+                if is_high
+                else "<span style='background:rgba(245, 158, 11, 0.15); color:#F59E0B; font-weight:700; padding:2px 8px; border-radius:4px; font-size:0.75rem;'>🟡 NORMAL PRIORITY</span>"
+            )
+            status_markup = (
+                f"<span style='background:#10B98120; color:#10B981; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:600;'>{p['status']}</span>"
+                if p["status"] == "Resolved"
+                else "<span style='background:rgba(59, 130, 246, 0.12); color:#3B82F6; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:600;'>Open</span>"
+            )
+
+            st.markdown(
+                clean_html(f"""
+                <div class="crm-card" style="padding: 1rem 1.25rem; border-left: 4px solid {border_c}; margin-bottom: 0.5rem;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        {badge_markup}
+                        {status_markup}
+                        <span style="font-size:0.75rem; color:{TEXT_MUTED};">Reported by <b>{p.get('reported_by', 'Sales Team')}</b> · {p.get('created_at', '')[:10]}</span>
+                    </div>
+                    <div style="font-weight:700; font-size:1.05rem; color:{TEXT_COLOR}; margin-bottom:4px;">
+                        {p['title']}
+                    </div>
+                    <div style="font-size:0.85rem; color:{TEXT_MUTED};">
+                        {p.get('description') or 'No additional context provided.'}
+                    </div>
+                </div>
+                """),
+                unsafe_allow_html=True,
+            )
+
+            act_c1, act_c2, act_c3 = st.columns([1.5, 1.5, 4])
+            with act_c1:
+                if p["status"] == "Open":
+                    if st.button("✅ Mark Resolved", key=f"{key_prefix}_res_{p['id']}", use_container_width=True):
+                        db.update_sales_problem_status(p["id"], "Resolved")
+                        st.success("Problem marked as Resolved!")
+                        st.rerun()
+                else:
+                    if st.button("🔄 Reopen", key=f"{key_prefix}_reopen_{p['id']}", use_container_width=True):
+                        db.update_sales_problem_status(p["id"], "Open")
+                        st.rerun()
+            with act_c2:
+                if st.button("🗑️ Delete", key=f"{key_prefix}_del_{p['id']}", use_container_width=True):
+                    db.delete_sales_problem(p["id"])
+                    st.rerun()
+
+
 # ---------------------------------------------------------------------------
 # VIEW 1: TODAY (Dashboard Executive Overview matching screenshot)
 # ---------------------------------------------------------------------------
@@ -541,96 +685,9 @@ if st.session_state["active_tab"] == "Today":
     )
 
     # -----------------------------------------------------------------------
-    # PROMINENT AI LEAD DISCOVERY & RESEARCH BAR
+    # SALES TEAM PROBLEM DESK // PRIORITY TRACKER
     # -----------------------------------------------------------------------
-    with st.container():
-        st.markdown(
-            f"""
-            <div class="crm-card" style="padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; border-left: 4px solid {ACCENT_COLOR};">
-                <div class="date-eyebrow" style="margin-bottom: 0.25rem;">AI LEAD DISCOVERY & RESEARCH ENGINE</div>
-                <div style="font-family:'Playfair Display', serif; font-size:1.35rem; font-weight:600; color:{TEXT_COLOR}; margin-bottom: 0.2rem;">
-                    Find & Qualify Prospective Clients
-                </div>
-                <div style="font-size: 0.85rem; color:{TEXT_MUTED}; margin-bottom: 0.75rem;">
-                    Enter what you are looking for. Gemini 3.6 Flash will search live web catalogs, verify lack of 3D configurators, lookup decision-maker emails with Hunter.io, and draft personalized outreach emails directly into your CRM.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # Strategy Preset Quick-Select Chips
-        st.markdown("<div style='font-size:0.8rem; font-weight:600; color:" + TEXT_MUTED + "; margin-bottom:6px;'>⚡ QUICK STRATEGY PRESETS:</div>", unsafe_allow_html=True)
-        preset_cols = st.columns(5)
-        chosen_preset = None
-        with preset_cols[0]:
-            if st.button("🎪 LEAP Riyadh Exhibitors", key="preset_leap", use_container_width=True):
-                chosen_preset = "Companies attending LEAP Riyadh relevant to Elipse Studio 3D visualization, spatial digital twins, and web configurators for in-person meetings"
-        with preset_cols[1]:
-            if st.button("🛋️ Luxury Bespoke Furniture", key="preset_furn", use_container_width=True):
-                chosen_preset = "Top 5 luxury bespoke furniture and joinery manufacturers in UAE or UK without a 3D web configurator"
-        with preset_cols[2]:
-            if st.button("🏎️ Custom Automotive / EV", key="preset_auto", use_container_width=True):
-                chosen_preset = "Custom automotive, electric vehicle, and specialty mobility builders in GCC or USA who need 3D configurators"
-        with preset_cols[3]:
-            if st.button("⛵ Superyacht & Marine", key="preset_yacht", use_container_width=True):
-                chosen_preset = "Top luxury yacht builders and custom marine interior manufacturers without interactive 3D configurators"
-        with preset_cols[4]:
-            if st.button("🏗️ Saudi Vision 2030 PropTech", key="preset_prop", use_container_width=True):
-                chosen_preset = "Major real estate developers and spatial tech firms in Saudi Arabia and UAE who need interactive 3D architectural twins"
-
-        with st.form("today_ai_finder_form"):
-            prompt_c1, prompt_c2 = st.columns([4.2, 1.3])
-            with prompt_c1:
-                today_prompt = st.text_input(
-                    "Search Criteria",
-                    value=chosen_preset or "",
-                    placeholder="e.g. Companies attending LEAP in Riyadh relevant to Elipse Studio, or bespoke furniture makers in UAE",
-                    label_visibility="collapsed",
-                )
-            with prompt_c2:
-                today_submitted = st.form_submit_button("🚀 Research & Draft", type="primary", use_container_width=True)
-
-        target_prompt = chosen_preset if chosen_preset else (today_prompt.strip() if today_submitted and today_prompt.strip() else None)
-
-        if target_prompt:
-            with st.spinner("AI is analyzing target criteria, verifying official websites, and drafting personalized opportunities..."):
-                result = agent_core.run_agent(target_prompt, log=lambda m: None)
-
-            if result.get("error"):
-                st.session_state["last_search_error"] = result["error"]
-            elif result["saved"] > 0:
-                st.session_state["last_search_msg"] = f"🎉 Successfully generated and added {result['saved']} new qualified lead(s) to your CRM!"
-                if result.get("skipped_duplicates"):
-                    st.session_state["last_search_skip"] = f"Skipped {len(result['skipped_duplicates'])} already in your database."
-            else:
-                if result.get("skipped_duplicates"):
-                    st.session_state["last_search_skip"] = f"Found {len(result['skipped_duplicates'])} matching companies, but all were already in your CRM database."
-                else:
-                    st.session_state["last_search_error"] = "No new companies found for this prompt. Please try a different query."
-            st.rerun()
-
-        if "last_search_error" in st.session_state:
-            err = str(st.session_state["last_search_error"])
-            if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
-                st.warning(
-                    "⚠️ **Google Gemini API Daily Quota Limit (Free Sandbox Tier):**\n\n"
-                    "Your API key reached Google AI Studio's free cap of 20 requests/day for this project.\n\n"
-                    "**How to unlock unlimited searches:**\n"
-                    "1. Go to [aistudio.google.com](https://aistudio.google.com/) and click **'Set up billing'** on your project (Gemini Flash is virtually free — pennies for thousands of searches), OR\n"
-                    "2. Click **'Create API key in new project'** in Google AI Studio and paste the new key into your Streamlit Secrets."
-                )
-            else:
-                st.error(f"⚠️ {err}")
-            del st.session_state["last_search_error"]
-
-        if "last_search_msg" in st.session_state:
-            st.success(st.session_state["last_search_msg"])
-            del st.session_state["last_search_msg"]
-
-        if "last_search_skip" in st.session_state:
-            st.info(st.session_state["last_search_skip"])
-            del st.session_state["last_search_skip"]
+    render_sales_problems_ui(key_prefix="today", default_expanded=False)
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
@@ -998,6 +1055,16 @@ elif st.session_state["active_tab"] == "Sales Terminal":
             st.session_state["sheet_url"] = new_url.strip()
             st.success("Updated Google Sheet URL! Synchronizing now...")
             st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# VIEW: PROBLEM DESK (Full-page Priority Manager)
+# ---------------------------------------------------------------------------
+elif st.session_state["active_tab"] == "Problem Desk":
+    st.markdown('<div class="date-eyebrow">SALES OPERATIONS & STRATEGY</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-heading">Sales Problem Desk</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Prioritize and resolve the top blockers faced by your outreach team.</div>', unsafe_allow_html=True)
+    render_sales_problems_ui(key_prefix="full_desk", default_expanded=True)
 
 
 # ---------------------------------------------------------------------------
