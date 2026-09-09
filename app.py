@@ -417,19 +417,49 @@ li[data-baseweb="menu-item"]:hover {{
     color: {ACCENT_COLOR} !important;
 }}
 
-/* Expanders */
-div[data-testid="stExpander"] {{
+/* Expanders - Complete Header & Body Overrides */
+details,
+summary,
+div[data-testid="stExpander"],
+div[data-testid="stExpander"] details,
+div[data-testid="stExpander"] details summary,
+div[data-testid="stExpander"] summary,
+div[data-testid="stExpander"] [data-testid="stExpanderDetails"] {{
     background-color: {CARD_BG} !important;
     background: {CARD_BG} !important;
-    border: 1px solid {CARD_BORDER} !important;
+    color: {TEXT_COLOR} !important;
+    border-color: {CARD_BORDER} !important;
     border-radius: 10px !important;
-    margin-bottom: 0.75rem !important;
 }}
 
+div[data-testid="stExpander"] details summary:hover,
+div[data-testid="stExpander"] details summary:focus,
+div[data-testid="stExpander"] details summary:active,
+div[data-testid="stExpander"] summary:hover,
+div[data-testid="stExpander"] summary:focus,
+div[data-testid="stExpander"] summary:active {{
+    background-color: {TAG_BG} !important;
+    background: {TAG_BG} !important;
+    color: {ACCENT_COLOR} !important;
+}}
+
+div[data-testid="stExpander"] details summary *,
+div[data-testid="stExpander"] summary *,
 div[data-testid="stExpander"] summary p,
 div[data-testid="stExpander"] summary span {{
     color: {TEXT_COLOR} !important;
     font-weight: 600 !important;
+}}
+
+div[data-testid="stExpander"] details summary:hover *,
+div[data-testid="stExpander"] summary:hover * {{
+    color: {ACCENT_COLOR} !important;
+}}
+
+div[data-testid="stExpander"] svg,
+div[data-testid="stExpander"] details summary svg {{
+    fill: {TEXT_COLOR} !important;
+    color: {TEXT_COLOR} !important;
 }}
 
 /* Modals & Dialogs */
