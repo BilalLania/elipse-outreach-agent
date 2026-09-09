@@ -366,20 +366,67 @@ div[data-testid="stExpander"] summary span {{
     font-weight: 600 !important;
 }}
 
-/* Pills & Segmented Controls */
+/* Pills & Segmented Controls - Bulletproof Contrast Override */
+div[data-testid="stPills"],
+div[data-testid="stPills"] > div,
+div[data-testid="stPills"] ul,
+div[data-testid="stPills"] li,
+div[data-testid="stSegmentedControl"],
+div[data-testid="stSegmentedControl"] > div,
+div[data-testid="stSegmentedControl"] [role="radiogroup"] {{
+    background-color: transparent !important;
+    background: transparent !important;
+    border: none !important;
+}}
+
 div[data-testid="stPills"] button,
-div[data-testid="stSegmentedControl"] button {{
+div[data-testid="stSegmentedControl"] button,
+div[data-testid="stSegmentedControl"] [role="radio"] {{
     background-color: {CARD_BG} !important;
+    background: {CARD_BG} !important;
     color: {TEXT_COLOR} !important;
     border: 1px solid {CARD_BORDER} !important;
     font-weight: 600 !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease !important;
 }}
 
 div[data-testid="stPills"] button[aria-checked="true"],
-div[data-testid="stSegmentedControl"] button[aria-checked="true"] {{
+div[data-testid="stSegmentedControl"] button[aria-checked="true"],
+div[data-testid="stSegmentedControl"] [role="radio"][aria-checked="true"] {{
     background-color: {ACCENT_COLOR} !important;
-    color: white !important;
+    background: {ACCENT_COLOR} !important;
+    color: #FFFFFF !important;
     border-color: {ACCENT_COLOR} !important;
+}}
+
+div[data-testid="stPills"] button[aria-checked="false"],
+div[data-testid="stSegmentedControl"] button[aria-checked="false"],
+div[data-testid="stSegmentedControl"] [role="radio"][aria-checked="false"] {{
+    background-color: {CARD_BG} !important;
+    background: {CARD_BG} !important;
+    color: {TEXT_MUTED} !important;
+    border-color: {CARD_BORDER} !important;
+}}
+
+div[data-testid="stPills"] button p,
+div[data-testid="stPills"] button span,
+div[data-testid="stPills"] button div,
+div[data-testid="stSegmentedControl"] button p,
+div[data-testid="stSegmentedControl"] button span,
+div[data-testid="stSegmentedControl"] button div,
+div[data-testid="stSegmentedControl"] [role="radio"] p,
+div[data-testid="stSegmentedControl"] [role="radio"] span,
+div[data-testid="stSegmentedControl"] [role="radio"] div {{
+    color: inherit !important;
+    -webkit-text-fill-color: inherit !important;
+}}
+
+/* Radios */
+div[data-testid="stRadio"] label,
+div[data-testid="stRadio"] span,
+div[data-testid="stRadio"] p {{
+    color: {TEXT_COLOR} !important;
 }}
 
 /* Terminal Tickers & Badges */
@@ -780,26 +827,38 @@ def render_sales_problems_ui(key_prefix: str = "today", default_expanded: bool =
             st.rerun()
 
     # Filter selector
-    filter_opts = ["All Open", "🔴 High Priority Only", "🟡 Normal Priority Only", "✅ Resolved Archive"]
-    f_prio = st.segmented_control(
-        "Priority Filter",
-        filter_opts,
-        default="All Open",
-        key=f"{key_prefix}_filter_prio",
-        label_visibility="collapsed",
-    ) if hasattr(st, "segmented_control") else st.radio(
-        "Priority Filter",
-        filter_opts,
-        horizontal=True,
-        key=f"{key_prefix}_filter_prio",
-        label_visibility="collapsed",
-    )
+    filter_key = f"{key_prefix}_prob_filter"
+    if filter_key not in st.session_state:
+        st.session_state[filter_key] = "All Open"
 
-    if f_prio == "✅ Resolved Archive":
+    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+    with f_col1:
+        is_sel = st.session_state[filter_key] == "All Open"
+        if st.button("All Open", key=f"{key_prefix}_f_all", type="primary" if is_sel else "secondary", use_container_width=True):
+            st.session_state[filter_key] = "All Open"
+            st.rerun()
+    with f_col2:
+        is_sel = st.session_state[filter_key] == "High Priority"
+        if st.button("🔴 High Priority", key=f"{key_prefix}_f_high", type="primary" if is_sel else "secondary", use_container_width=True):
+            st.session_state[filter_key] = "High Priority"
+            st.rerun()
+    with f_col3:
+        is_sel = st.session_state[filter_key] == "Normal Priority"
+        if st.button("🟡 Normal Priority", key=f"{key_prefix}_f_norm", type="primary" if is_sel else "secondary", use_container_width=True):
+            st.session_state[filter_key] = "Normal Priority"
+            st.rerun()
+    with f_col4:
+        is_sel = st.session_state[filter_key] == "Resolved"
+        if st.button("✅ Resolved Archive", key=f"{key_prefix}_f_res", type="primary" if is_sel else "secondary", use_container_width=True):
+            st.session_state[filter_key] = "Resolved"
+            st.rerun()
+
+    curr_filter = st.session_state[filter_key]
+    if curr_filter == "Resolved":
         items = db.get_sales_problems(status_filter="Resolved")
-    elif "High Priority" in f_prio:
+    elif curr_filter == "High Priority":
         items = db.get_sales_problems(priority_filter="High Priority", status_filter="Open")
-    elif "Normal Priority" in f_prio:
+    elif curr_filter == "Normal Priority":
         items = db.get_sales_problems(priority_filter="Normal Priority", status_filter="Open")
     else:
         items = db.get_sales_problems(status_filter="Open")
