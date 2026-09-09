@@ -438,15 +438,7 @@ with top_col3:
             new_crole = st.text_input("Role / Title", placeholder="e.g. Head of Marketing")
             new_cemail = st.text_input("Contact Email", placeholder="name@company.com")
             new_val = st.number_input("Estimated Deal Value ($)", value=18000.0, step=1000.0)
-            new_tag = st.selectbox("Industry / Product Tag", [
-                "Bespoke Furniture",
-                "Luxury Interiors",
-                "Architectural & Real Estate",
-                "Automotive & Transport",
-                "Yacht & Marine",
-                "Industrial Equipment",
-                "Consumer Products",
-            ])
+            new_tag = st.selectbox("Industry Category", db.STANDARD_CATEGORIES)
             new_stage = st.selectbox("Pipeline Stage", [s[0] for s in db.PIPELINE_STAGES], format_func=lambda s: db.STAGE_LABELS.get(s, s))
             new_reason = st.text_area("3D Configurator Angle / Reason", placeholder="Why this company needs an interactive 3D configurator...")
             new_submitted = st.form_submit_button("Save Lead to CRM", type="primary")
@@ -1055,24 +1047,32 @@ elif st.session_state["active_tab"] == "Problem Desk":
 # ---------------------------------------------------------------------------
 elif st.session_state["active_tab"] == "Pipeline":
     st.markdown('<div class="hero-heading">Studio Pipeline</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Track and progress accounts through your sales stages.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Track and progress accounts through your sales stages and industry sectors.</div>', unsafe_allow_html=True)
 
-    filter_stage = st.selectbox(
-        "Stage Filter",
-        ["all"] + [s[0] for s in db.PIPELINE_STAGES],
-        format_func=lambda s: "All Pipeline Stages" if s == "all" else db.STAGE_LABELS.get(s, s),
-    )
+    col_stg, col_cat = st.columns([1, 1])
+    with col_stg:
+        filter_stage = st.selectbox(
+            "Stage Filter",
+            ["all"] + [s[0] for s in db.PIPELINE_STAGES],
+            format_func=lambda s: "All Pipeline Stages" if s == "all" else db.STAGE_LABELS.get(s, s),
+        )
+    with col_cat:
+        filter_cat = st.selectbox(
+            "Category Filter",
+            ["All Categories"] + db.STANDARD_CATEGORIES,
+        )
 
-    leads = db.get_all_leads(stage_filter=filter_stage, search_query=search_query)
+    leads = db.get_all_leads(stage_filter=filter_stage, search_query=search_query, category_filter=filter_cat)
 
     if not leads:
-        st.info("No leads found for this stage filter. Use 'AI Lead Finder' or 'Add a Lead' to populate.")
+        st.info("No leads found for this filter combination. Try selecting 'All Categories' or use 'AI Lead Finder'.")
     else:
         for lead in leads:
             val = f"${lead.get('deal_value', 15000):,.0f}"
             stage_name = db.STAGE_LABELS.get(lead.get("pipeline_stage"), "Draft Ready")
+            cat_label = lead.get('industry_tag') or "⚡ Tech & Commercial Products"
             
-            with st.expander(f"💼 **{lead['company_name']}** — {val} · {stage_name}"):
+            with st.expander(f"💼 **{lead['company_name']}** — {val} · {cat_label} ({stage_name})"):
                 c1, c2, c3 = st.columns([2, 2, 1.5])
 
                 with c1:
@@ -1081,7 +1081,7 @@ elif st.session_state["active_tab"] == "Pipeline":
                     st.markdown(f"**Contact:** {lead.get('contact_name') or 'N/A'} ({lead.get('contact_role') or 'Unknown'})")
                     st.markdown(f"**Email:** `{lead.get('contact_email') or 'unknown'}`")
                     render_hunter_decision_makers_ui(lead, key_prefix="pipe")
-                    st.markdown(f"**Tag:** `{lead.get('industry_tag', '3D Configurator')}`")
+                    st.markdown(f"**Category:** `{cat_label}`")
                     st.markdown(f"**Angle:** {lead.get('reason')}")
 
                 with c2:
@@ -1116,10 +1116,81 @@ elif st.session_state["active_tab"] == "Pipeline":
 # VIEW 3: CONTACTS & ACCOUNTS
 # ---------------------------------------------------------------------------
 elif st.session_state["active_tab"] == "Contacts":
+    st.markdown('<div class="date-eyebrow">DIRECTORY & SEGMENTATION</div>', unsafe_allow_html=True)
     st.markdown('<div class="hero-heading">Contacts & Accounts</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Complete client directory and interaction history.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Segmented client directory by target industry sector with real-time deal management.</div>', unsafe_allow_html=True)
 
-    leads = db.get_all_leads(search_query=search_query)
+    all_leads = db.get_all_leads(search_query=search_query)
+
+    # Calculate dynamic category counts
+    cat_counts = {}
+    for l in all_leads:
+        cat = l.get("industry_tag") or "⚡ Tech & Commercial Products"
+        cat_counts[cat] = cat_counts.get(cat, 0) + 1
+
+    # Standard categories first, then any extra categories present in DB
+    available_cats = [c for c in db.STANDARD_CATEGORIES if c in cat_counts]
+    for c in cat_counts:
+        if c not in available_cats:
+            available_cats.append(c)
+
+    pill_choices = ["All Categories"] + available_cats
+
+    if "contact_selected_cat" not in st.session_state:
+        st.session_state["contact_selected_cat"] = "All Categories"
+    if st.session_state["contact_selected_cat"] not in pill_choices:
+        st.session_state["contact_selected_cat"] = "All Categories"
+
+    st.markdown("<div style='margin-bottom:6px; font-size:0.75rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:" + TEXT_MUTED + ";'>🏷️ BROWSE LEADS BY CATEGORY</div>", unsafe_allow_html=True)
+
+    active_cat = st.pills(
+        "Filter by Industry Category",
+        pill_choices,
+        default=st.session_state["contact_selected_cat"],
+        format_func=lambda c: f"🌐 All Leads ({len(all_leads)})" if c == "All Categories" else f"{c} ({cat_counts.get(c, 0)})",
+        key="contact_cat_pill_selector",
+        label_visibility="collapsed",
+    )
+    if not active_cat:
+        active_cat = "All Categories"
+    st.session_state["contact_selected_cat"] = active_cat
+
+    # Filter leads by selected category
+    if active_cat != "All Categories":
+        leads = [l for l in all_leads if l.get("industry_tag") == active_cat]
+    else:
+        leads = all_leads
+
+    # Executive Category Overview Card
+    cat_total_val = sum(float(l.get("deal_value") or 0) for l in leads)
+    cat_lead_count = len(leads)
+    draft_count = sum(1 for l in leads if l.get("pipeline_stage") == "draft_ready")
+    contacted_count = sum(1 for l in leads if l.get("pipeline_stage") in ["contacted", "followup_due"])
+    meeting_count = sum(1 for l in leads if l.get("pipeline_stage") in ["meeting_booked", "proposal_sent", "won"])
+
+    st.markdown(
+        clean_html(f"""
+        <div class="crm-card" style="padding: 1.15rem 1.4rem; margin-top: 0.5rem; margin-bottom: 1.25rem; border-left: 4px solid {ACCENT_COLOR};">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <div>
+                    <div class="date-eyebrow" style="margin-bottom:0.15rem;">ACTIVE SECTOR OVERVIEW</div>
+                    <div style="font-family:'Playfair Display', serif; font-size:1.3rem; font-weight:600; color:{TEXT_COLOR};">
+                        {active_cat if active_cat != 'All Categories' else '🌐 All Industry Sectors'}
+                    </div>
+                    <div style="font-size:0.85rem; color:{TEXT_MUTED}; margin-top:2px;">
+                        Showing <b>{cat_lead_count}</b> account{'s' if cat_lead_count != 1 else ''} · <b>${cat_total_val:,.0f}</b> combined pipeline value
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <span class="terminal-pill-blue" style="font-size:0.78rem;">📝 {draft_count} Draft Ready</span>
+                    <span class="terminal-pill-amber" style="font-size:0.78rem;">📤 {contacted_count} Outreach / Due</span>
+                    <span class="terminal-pill-green" style="font-size:0.78rem;">🎯 {meeting_count} Booked / Pipeline</span>
+                </div>
+            </div>
+        </div>
+        """),
+        unsafe_allow_html=True,
+    )
 
     # CSV Export
     if leads:
@@ -1135,32 +1206,80 @@ elif st.session_state["active_tab"] == "Contacts":
             ])
 
         st.download_button(
-            label="📥 Export Directory to CSV",
+            label=f"📥 Export {len(leads)} Filtered Contact{'s' if len(leads) != 1 else ''} to CSV",
             data=output.getvalue(),
-            file_name="elipse_crm_contacts.csv",
+            file_name=f"elipse_{active_cat.replace(' ', '_').lower()}_contacts.csv",
             mime="text/csv",
         )
 
-    for lead in leads:
-        stage_name = db.STAGE_LABELS.get(lead.get("pipeline_stage"), "Draft Ready")
-        with st.expander(f"👤 **{lead.get('contact_name') or lead['company_name']}** · {lead['company_name']} ({stage_name})"):
-            c1, c2 = st.columns([1.5, 2])
-            with c1:
-                st.markdown(f"**Company:** [{lead['company_name']}]({lead.get('company_website')})")
-                st.markdown(f"**Contact:** {lead.get('contact_name') or 'N/A'}")
-                st.markdown(f"**Role:** {lead.get('contact_role') or 'Unknown'}")
-                st.markdown(f"**Email:** `{lead['contact_email']}`")
-                render_hunter_decision_makers_ui(lead, key_prefix="contacts")
-                st.markdown(f"**Phone:** `{lead.get('contact_phone') or 'None'}`")
-                st.markdown(f"**Industry:** `{lead.get('industry_tag')}`")
-                st.markdown(f"**Deal Value:** `${lead.get('deal_value', 15000):,.0f}`")
+    if not leads:
+        st.info(f"No leads found under '{active_cat}'. Use 'AI Lead Finder' or 'Add a Lead' to discover companies for this category.")
+    else:
+        for lead in leads:
+            stage_name = db.STAGE_LABELS.get(lead.get("pipeline_stage"), "Draft Ready")
+            cat_tag = lead.get("industry_tag") or "⚡ Tech & Commercial Products"
+            val = f"${lead.get('deal_value', 15000):,.0f}"
 
-            with c2:
-                notes = st.text_area("Meeting & Relationship Notes", lead.get("notes") or "", height=120, key=f"notes_{lead['id']}", placeholder="Log call notes, design requirements, follow-up thoughts...")
-                if st.button("💾 Save Notes", key=f"savenotes_{lead['id']}"):
-                    db.update_lead(lead["id"], notes=notes)
-                    st.success("Notes saved!")
-                    st.rerun()
+            with st.expander(f"👤 **{lead.get('contact_name') or lead['company_name']}** · **{lead['company_name']}** — {val} · {cat_tag} ({stage_name})"):
+                c1, c2, c3 = st.columns([1.8, 1.8, 1.4])
+                with c1:
+                    st.markdown("#### 🏢 Company & Contact")
+                    st.markdown(f"**Company:** [{lead['company_name']}]({lead.get('company_website')})")
+                    st.markdown(f"**Contact:** `{lead.get('contact_name') or 'N/A'}`")
+                    st.markdown(f"**Role:** *{lead.get('contact_role') or 'Unknown'}*")
+                    st.markdown(f"**Email:** `{lead['contact_email']}`")
+                    render_hunter_decision_makers_ui(lead, key_prefix="contacts")
+                    if lead.get("reason"):
+                        st.markdown(f"**Sales Angle:** {lead.get('reason')}")
+
+                with c2:
+                    st.markdown("#### 🏷️ Classification & Deal")
+                    cur_cat = lead.get("industry_tag") or "⚡ Tech & Commercial Products"
+                    cat_idx = db.STANDARD_CATEGORIES.index(cur_cat) if cur_cat in db.STANDARD_CATEGORIES else 0
+                    new_cat = st.selectbox(
+                        "Category Sector",
+                        db.STANDARD_CATEGORIES,
+                        index=cat_idx,
+                        key=f"c_cat_{lead['id']}"
+                    )
+                    
+                    cur_stg_idx = [s[0] for s in db.PIPELINE_STAGES].index(lead.get("pipeline_stage", "draft_ready"))
+                    new_stg = st.selectbox(
+                        "Pipeline Stage",
+                        [s[0] for s in db.PIPELINE_STAGES],
+                        index=cur_stg_idx,
+                        key=f"c_stg_{lead['id']}",
+                        format_func=lambda s: db.STAGE_LABELS.get(s, s)
+                    )
+                    new_phone = st.text_input("Direct Phone", lead.get("contact_phone") or "", key=f"c_ph_{lead['id']}")
+                    new_val = st.number_input("Deal Value ($)", value=float(lead.get("deal_value") or 15000.0), step=1000.0, key=f"c_val_{lead['id']}")
+
+                    if st.button("💾 Save Lead Details", key=f"save_lead_c_{lead['id']}", type="primary"):
+                        db.update_lead(
+                            lead["id"],
+                            industry_tag=new_cat,
+                            pipeline_stage=new_stg,
+                            contact_phone=new_phone.strip(),
+                            deal_value=new_val
+                        )
+                        st.success("Lead details updated!")
+                        st.rerun()
+
+                with c3:
+                    st.markdown("#### 📝 Notes & Actions")
+                    notes = st.text_area("Relationship Notes", lead.get("notes") or "", height=95, key=f"notes_{lead['id']}", placeholder="Log call notes, objections...")
+                    if st.button("💾 Save Notes", key=f"savenotes_{lead['id']}"):
+                        db.update_lead(lead["id"], notes=notes)
+                        st.success("Notes saved!")
+                        st.rerun()
+
+                    # Direct Mailto
+                    email_target = lead["contact_email"]
+                    if email_target and email_target != "unknown" and "@" in email_target:
+                        encoded_subj = urllib.parse.quote(lead.get("subject", f"Question regarding {lead['company_name']}"))
+                        encoded_body = urllib.parse.quote(lead.get("body", ""))
+                        mailto_url = f"mailto:{email_target}?subject={encoded_subj}&body={encoded_body}"
+                        st.markdown(f'<a href="{mailto_url}" target="_blank" style="display:block; text-align:center; padding:6px 12px; background-color:{ACCENT_COLOR}; color:white; text-decoration:none; border-radius:6px; font-weight:600; margin-top:8px;">📧 Open in Email App</a>', unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------

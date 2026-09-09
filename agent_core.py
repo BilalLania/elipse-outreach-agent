@@ -85,7 +85,7 @@ Return a valid JSON array of objects:
     "contact_name": "Full Name of Executive (or Department Team)",
     "contact_role": "Executive Title (e.g. CMO, Head of Innovation, VP Marketing, Owner)",
     "contact_email": "direct email or company contact email",
-    "industry_tag": "Relevant tag (e.g. Giga-Project / LEAP Exhibitor, Custom Automotive, Luxury Interiors)",
+    "industry_tag": "Must be one of: '⛳ Custom Golf Carts', '🏎️ Custom Automotive & Mobility', '🛋️ Luxury Furniture & Interiors', '🏗️ Real Estate & Megaprojects', '⛵ Superyachts & Marine', '⚡ Tech & Commercial Products'",
     "deal_value": 35000,
     "reason_no_configurator": "Precise reason why Elipse Studio adds massive value",
     "subject": "Personalized punchy subject line",
@@ -308,6 +308,24 @@ def get_top_decision_makers(domain: str, limit: int = 3) -> list:
     return []
 
 
+def map_to_standard_category(tag, company_name=""):
+    t = (tag or "").strip()
+    if t in db.STANDARD_CATEGORIES:
+        return t
+    comb = (t + " " + company_name).lower()
+    if any(k in comb for k in ["golf", "cart", "rad dog", "ckd", "tidewater", "garrett", "apex"]):
+        return "⛳ Custom Golf Carts"
+    if any(k in comb for k in ["furniture", "joinery", "interior", "kitchen", "cabinet", "decor", "sofa", "lighting"]):
+        return "🛋️ Luxury Furniture & Interiors"
+    if any(k in comb for k in ["automotive", "car", "vehicle", "mobility", "motor", "melex", "italcar", "motion", "bensel"]):
+        return "🏎️ Custom Automotive & Mobility"
+    if any(k in comb for k in ["real estate", "property", "proptech", "giga", "megaproject", "leap", "architecture", "developer"]):
+        return "🏗️ Real Estate & Megaprojects"
+    if any(k in comb for k in ["yacht", "marine", "boat", "vessel"]):
+        return "⛵ Superyachts & Marine"
+    return "⚡ Tech & Commercial Products"
+
+
 def run_agent(user_prompt: str, log=None) -> dict:
     """
     Executes multi-model fallback cascade intelligence to research companies,
@@ -362,7 +380,8 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
         contact_name = c.get("contact_name", "Team")
         contact_role = c.get("contact_role", "")
         contact_email = c.get("contact_email", "unknown")
-        industry_tag = c.get("industry_tag", "3D Configurator / CGI")
+        raw_tag = c.get("industry_tag", "⚡ Tech & Commercial Products")
+        industry_tag = map_to_standard_category(raw_tag, company_name)
         deal_val = float(c.get("deal_value") or 25000.0)
         subject = c.get("subject", f"Question regarding {company_name}")
         raw_body = c.get("body", "")

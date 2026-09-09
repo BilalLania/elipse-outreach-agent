@@ -24,6 +24,15 @@ PIPELINE_STAGES = [
 
 STAGE_LABELS = dict(PIPELINE_STAGES)
 
+STANDARD_CATEGORIES = [
+    "⛳ Custom Golf Carts",
+    "🏎️ Custom Automotive & Mobility",
+    "🛋️ Luxury Furniture & Interiors",
+    "🏗️ Real Estate & Megaprojects",
+    "⛵ Superyachts & Marine",
+    "⚡ Tech & Commercial Products",
+]
+
 
 @contextmanager
 def get_conn():
@@ -114,6 +123,7 @@ def init_db():
 
     seed_or_update_core_leads()
     seed_initial_problems()
+    normalize_lead_categories()
 
 
 def seed_initial_problems():
@@ -192,7 +202,7 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Hal Garrett",
         "contact_role": "President & Owner",
         "contact_email": "halg@gowithgarretts.com",
-        "industry_tag": "Custom Golf Carts",
+        "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 18500.0,
         "reason": "Buyers customize body paint, upholstery stitching, lift kits, and rim styles using static gallery photos, leading to drop-offs before requesting a quote.",
         "subject": "3D cart builder for Garrett's Custom Golf Carts",
@@ -204,7 +214,7 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Custom Sales Team",
         "contact_role": "Head of Custom Sales",
         "contact_email": "sales@tidewatercarts.com",
-        "industry_tag": "Custom Golf Carts",
+        "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 21000.0,
         "reason": "Offers extensive custom colors, tops, and high-performance lift packages, but currently relies on static inventory listings.",
         "subject": "Interactive 3D configurator for Tidewater Carts",
@@ -216,7 +226,7 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Custom Build Team",
         "contact_role": "Head of Sales",
         "contact_email": "sales@performancegolfcarts.com",
-        "industry_tag": "Custom Golf Carts",
+        "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 19500.0,
         "reason": "High-volume custom builder with extensive parts & accessories inventory that would see higher conversions with live 3D visual customization.",
         "subject": "3D visualizer for Performance Golf Carts",
@@ -228,7 +238,7 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Sales & Design Team",
         "contact_role": "Director of Sales",
         "contact_email": "sales@apexgolfcarts.com",
-        "industry_tag": "Custom Golf Carts",
+        "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 17500.0,
         "reason": "Specializes in luxury street-legal electric carts with premium custom finishes that require high-end 3D visualization.",
         "subject": "3D customization for Apex Golf Carts",
@@ -240,13 +250,44 @@ VERIFIED_SAMPLE_LEADS = [
         "contact_name": "Custom Build Division",
         "contact_role": "Head of Custom Engineering & Sales",
         "contact_email": "info@streetrodgolfcars.com",
-        "industry_tag": "Bespoke Vehicles",
+        "industry_tag": "⛳ Custom Golf Carts",
         "deal_value": 18000.0,
         "reason": "Handcrafted vintage hot rod replica golf carts with bespoke paint and chrome options, ideal for high-ticket 3D interactive customization.",
         "subject": "Real-time 3D configurator for Streetrod Golf Cars",
         "body": "Hi Team,\n\nI was admiring your handcrafted hot rod golf cars at Streetrod. The vintage fiberglass bodywork and custom chrome details are works of art.\n\nFor bespoke vehicles at this price point, an interactive 3D web configurator allows collectors to test paint colors, flame graphics, and wheel packages in photorealistic 3D directly on your site.\n\nWould you be open to seeing a quick concept tailored for Streetrod? You can choose a time here: https://calendly.com/bilal-lania-elipsestudio/15-mins-meeting\n\nBest,\nBilal\nElipse Studio",
     },
 ]
+
+
+def normalize_lead_categories():
+    """Maps generic or legacy tags into standard primary industry categories."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT id, company_name, industry_tag FROM leads").fetchall()
+        for r in rows:
+            name = r["company_name"] or ""
+            current_tag = r["industry_tag"] or ""
+
+            if current_tag in STANDARD_CATEGORIES:
+                continue
+
+            n = (name + " " + current_tag).lower()
+            if any(k in n for k in ["golf", "cart", "rad dog", "ckd", "tidewater", "garrett", "apex"]):
+                new_cat = "⛳ Custom Golf Carts"
+            elif any(k in n for k in ["furniture", "joinery", "interior", "design house", "kitchen"]):
+                new_cat = "🛋️ Luxury Furniture & Interiors"
+            elif any(k in n for k in ["melex", "italcar", "motion", "lem", "bensel", "invest-mobile", "streetrod", "auto", "car", "vehicle", "mobility"]):
+                new_cat = "🏎️ Custom Automotive & Mobility"
+            elif any(k in n for k in ["aldar", "roshn", "diriyah", "neom", "estate", "property", "architect"]):
+                new_cat = "🏗️ Real Estate & Megaprojects"
+            elif any(k in n for k in ["yacht", "marine", "boat", "vessel"]):
+                new_cat = "⛵ Superyachts & Marine"
+            elif current_tag.strip():
+                new_cat = current_tag.strip()
+            else:
+                new_cat = "⚡ Tech & Commercial Products"
+
+            if new_cat != current_tag:
+                conn.execute("UPDATE leads SET industry_tag = ? WHERE id = ?", (new_cat, r["id"]))
 
 
 def seed_or_update_core_leads():
@@ -355,7 +396,7 @@ def add_lead(
         return cur.lastrowid
 
 
-def get_all_leads(stage_filter=None, search_query=None):
+def get_all_leads(stage_filter=None, search_query=None, category_filter=None):
     with get_conn() as conn:
         query = "SELECT * FROM leads WHERE 1=1"
         params = []
@@ -363,6 +404,10 @@ def get_all_leads(stage_filter=None, search_query=None):
         if stage_filter and stage_filter != "all":
             query += " AND pipeline_stage = ?"
             params.append(stage_filter)
+
+        if category_filter and category_filter != "all" and not category_filter.startswith("All"):
+            query += " AND industry_tag = ?"
+            params.append(category_filter)
 
         if search_query:
             query += " AND (LOWER(company_name) LIKE ? OR LOWER(contact_name) LIKE ? OR LOWER(contact_email) LIKE ? OR LOWER(industry_tag) LIKE ?)"
@@ -372,6 +417,22 @@ def get_all_leads(stage_filter=None, search_query=None):
         query += " ORDER BY created_at DESC"
         rows = conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_category_stats():
+    """Returns aggregated count and pipeline volume per category."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT industry_tag, deal_value, pipeline_stage FROM leads").fetchall()
+        stats = {}
+        for r in rows:
+            cat = r["industry_tag"] or "⚡ Tech & Commercial Products"
+            if cat not in stats:
+                stats[cat] = {"count": 0, "deal_value": 0.0, "stages": {}}
+            stats[cat]["count"] += 1
+            stats[cat]["deal_value"] += float(r["deal_value"] or 0.0)
+            stg = r["pipeline_stage"] or "draft_ready"
+            stats[cat]["stages"][stg] = stats[cat]["stages"].get(stg, 0) + 1
+        return stats
 
 
 def update_lead(lead_id, **fields):
