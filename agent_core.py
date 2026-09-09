@@ -15,6 +15,7 @@ import os
 import json
 import re
 import time
+import urllib.parse
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import requests
@@ -85,6 +86,7 @@ Return a valid JSON array of objects:
     "contact_name": "Full Name of Executive (or Department Team)",
     "contact_role": "Executive Title (e.g. CMO, Head of Innovation, VP Marketing, Owner)",
     "contact_email": "direct email or company contact email",
+    "contact_linkedin": "Direct personal LinkedIn profile URL (https://www.linkedin.com/in/...) or company LinkedIn page (https://www.linkedin.com/company/...)",
     "industry_tag": "Must be one of: '⛳ Custom Golf Carts', '🏎️ Custom Automotive & Mobility', '🛋️ Luxury Furniture & Interiors', '🏗️ Real Estate & Megaprojects', '⛵ Superyachts & Marine', '⚡ Tech & Commercial Products'",
     "deal_value": 35000,
     "reason_no_configurator": "Precise reason why Elipse Studio adds massive value",
@@ -309,6 +311,95 @@ def get_top_decision_makers(domain: str, limit: int = 3) -> list:
         pass
 
     return []
+
+
+def research_prospect_linkedin(company_name: str, contact_name: str = "") -> dict:
+    """
+    Uses Gemini Flash cascade intelligence to research and find the exact personal
+    LinkedIn profile URL (or company LinkedIn page) for the founder, CEO, or top executive.
+    """
+    clean_target = f"{contact_name or ''} {company_name}".strip()
+    xray_fallback = f"https://www.google.com/search?q={urllib.parse.quote('site:linkedin.com/in ' + clean_target)}"
+
+    try:
+        client = get_gemini_client()
+    except Exception as e:
+        return {
+            "success": False,
+            "contact_name": contact_name or "Decision Maker",
+            "contact_role": "Owner",
+            "linkedin_url": "",
+            "company_linkedin": "",
+            "google_xray_url": xray_fallback,
+            "reason": str(e),
+        }
+
+    target_query = f"{contact_name} at {company_name}" if contact_name and contact_name.lower() not in ["decision maker", "team", "unknown", ""] else company_name
+
+    prompt = f"""You are an elite B2B executive researcher. Find the exact verified LinkedIn profile for the primary decision maker (Founder, CEO, President, Owner, or COO) of:
+Target Prospect: {target_query}
+Company Name: {company_name}
+
+Instructions:
+1. Identify the actual current Founder, CEO, Owner, or top executive of {company_name}. If '{contact_name}' is not the primary executive or doesn't have an indexed profile, identify the actual founder/owner (e.g. Jonathan Ward for ICON 4x4).
+2. Provide their verified personal LinkedIn profile URL (format: https://www.linkedin.com/in/...).
+3. If personal URL is uncertain, provide the official company LinkedIn page (format: https://www.linkedin.com/company/...).
+4. Construct an optimized Google X-Ray search query.
+
+Return ONLY a JSON object:
+{{
+  "contact_name": "Full Name of decision maker",
+  "contact_role": "Current Title / Role",
+  "linkedin_url": "https://www.linkedin.com/in/username or https://www.linkedin.com/company/companyname",
+  "company_linkedin": "https://www.linkedin.com/company/companyname",
+  "search_query": "Clean keyword query for LinkedIn or Google",
+  "reason": "1 brief sentence explaining who this person is at the company"
+}}"""
+
+    for model_name in MODEL_CASCADE:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.2,
+                ),
+            )
+            data = extract_json_safe(response.text)
+            if data and isinstance(data, dict):
+                li_url = (data.get("linkedin_url") or "").strip()
+                c_name = (data.get("contact_name") or contact_name or "Decision Maker").strip()
+                c_role = (data.get("contact_role") or "Owner").strip()
+                search_q = data.get("search_query") or f"{c_name} {company_name}"
+                xray_url = f"https://www.google.com/search?q={urllib.parse.quote('site:linkedin.com/in ' + search_q)}"
+
+                # Fallback to company_linkedin if personal linkedin_url is empty
+                if not li_url and data.get("company_linkedin"):
+                    li_url = data.get("company_linkedin").strip()
+
+                return {
+                    "success": True,
+                    "contact_name": c_name,
+                    "contact_role": c_role,
+                    "linkedin_url": li_url,
+                    "company_linkedin": data.get("company_linkedin", "").strip(),
+                    "google_xray_url": xray_url,
+                    "reason": data.get("reason", "").strip(),
+                }
+        except Exception:
+            time.sleep(0.4)
+            continue
+
+    return {
+        "success": False,
+        "contact_name": contact_name or "Decision Maker",
+        "contact_role": "Owner",
+        "linkedin_url": "",
+        "company_linkedin": "",
+        "google_xray_url": xray_fallback,
+        "reason": "Could not automatically resolve. Use Google X-Ray search.",
+    }
 
 
 def map_to_standard_category(tag, company_name=""):

@@ -497,15 +497,63 @@ st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
 def get_linkedin_profile_url(contact_name: str, company_name: str, existing_url: str = "") -> str:
     """
-    Returns direct LinkedIn URL if present; otherwise creates a 1-click LinkedIn people search link
-    designed for the free Apollo Chrome Extension to pop up and reveal mobile phone numbers.
+    Returns direct LinkedIn URL if present; otherwise creates an optimized Google X-Ray search link
+    (site:linkedin.com/in ...) that directly surfaces the prospect's profile without LinkedIn's 'No results found' error.
     """
     if existing_url and "linkedin.com" in existing_url:
         return existing_url
-    query = f"{contact_name or ''} {company_name or ''}".strip()
-    if not query:
-        query = company_name or "company"
+    clean_target = f"{contact_name or ''} {company_name or ''}".strip() or (company_name or "company")
+    return f"https://www.google.com/search?q={urllib.parse.quote('site:linkedin.com/in ' + clean_target)}"
+
+
+def get_linkedin_direct_search_url(contact_name: str, company_name: str) -> str:
+    query = f"{contact_name or ''} {company_name or ''}".strip() or (company_name or "company")
     return f"https://www.linkedin.com/search/results/people/?keywords={urllib.parse.quote(query)}"
+
+
+def render_linkedin_research_and_reveal_ui(lead, key_prefix="cc"):
+    """
+    Renders the 1-click LinkedIn profile/Apollo Reveal button,
+    plus an interactive '🤖 AI Find LinkedIn (Gemini Flash)' research button.
+    """
+    lead_id = lead["id"]
+    comp_name = lead.get("company_name", "")
+    c_name = lead.get("contact_name") or ""
+    c_li = lead.get("contact_linkedin") or ""
+
+    # 1. AI Research button with Gemini Flash
+    if st.button("🤖 AI Research LinkedIn (Gemini Flash)", key=f"btn_ai_li_{key_prefix}_{lead_id}", use_container_width=True):
+        with st.spinner(f"Gemini Flash is researching decision makers and LinkedIn for {comp_name}..."):
+            res = agent_core.research_prospect_linkedin(comp_name, c_name)
+        if res.get("linkedin_url"):
+            up_dict = {
+                "contact_name": res["contact_name"],
+                "contact_role": res["contact_role"],
+                "contact_linkedin": res["linkedin_url"],
+            }
+            db.update_lead(lead_id, **up_dict)
+            st.success(f"🎉 Identified {res['contact_name']} ({res['contact_role']})!\nLinked: {res['linkedin_url']}")
+            st.rerun()
+        else:
+            st.warning("Could not resolve direct URL automatically. Use Google X-Ray link below.")
+
+    # 2. LinkedIn Open / Reveal Buttons
+    if c_li and "linkedin.com" in c_li:
+        st.markdown(
+            f'<a href="{c_li}" target="_blank" style="display:block; text-align:center; padding:9px 12px; background:#0A66C2; color:white !important; font-family:\'Plus Jakarta Sans\', sans-serif; font-weight:700; font-size:0.86rem; border-radius:7px; text-decoration:none; margin-top:4px; margin-bottom:4px; box-shadow: 0 2px 8px rgba(10,102,194,0.3);">🔗 Open LinkedIn (Apollo Reveal)</a>',
+            unsafe_allow_html=True,
+        )
+    else:
+        xray_url = get_linkedin_profile_url(c_name, comp_name, "")
+        li_search_url = get_linkedin_direct_search_url(c_name, comp_name)
+        st.markdown(
+            f'<a href="{xray_url}" target="_blank" style="display:block; text-align:center; padding:8px 11px; background:#1E293B; border:1px solid #0A66C2; color:#38BDF8 !important; font-family:\'Plus Jakarta Sans\', sans-serif; font-weight:700; font-size:0.82rem; border-radius:7px; text-decoration:none; margin-top:4px; margin-bottom:3px;">🌐 Google X-Ray Search (Apollo Reveal)</a>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'<div style="text-align:center; font-size:0.75rem; margin-bottom:4px;"><a href="{li_search_url}" target="_blank" style="color:{TEXT_MUTED}; text-decoration:underline;">Or open in LinkedIn search bar</a></div>',
+            unsafe_allow_html=True,
+        )
 
 
 def render_hunter_decision_makers_ui(lead, key_prefix="today"):
@@ -829,13 +877,7 @@ if st.session_state["active_tab"] == "Today":
                         contact_channels.append(f"**Website:** [{lead.get('company_website')}]({lead.get('company_website')})")
                     st.markdown(" · ".join(contact_channels))
 
-                    t_li = lead.get("contact_linkedin") or ""
-                    t_li_url = get_linkedin_profile_url(lead.get("contact_name") or "", lead.get("company_name") or "", t_li)
-                    t_li_label = "🔗 LinkedIn Profile (Apollo Reveal)" if (t_li and "linkedin.com" in t_li) else "🔗 Find on LinkedIn (Apollo Reveal)"
-                    st.markdown(
-                        f'<a href="{t_li_url}" target="_blank" style="display:inline-block; padding:4px 10px; background:#0A66C2; color:white !important; font-size:0.78rem; font-weight:700; border-radius:5px; text-decoration:none; margin-top:2px; margin-bottom:6px;">{t_li_label}</a>',
-                        unsafe_allow_html=True
-                    )
+                    render_linkedin_research_and_reveal_ui(lead, key_prefix=f"today_{lead['id']}")
 
                     render_hunter_decision_makers_ui(lead, key_prefix="today")
                     st.markdown(f"**Fit Observation:** {lead.get('reason')}")
@@ -1357,14 +1399,8 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                     else:
                         st.warning("No phone on file.")
 
-                    # 1-Click LinkedIn / Apollo Phone Reveal Button
-                    li_url = get_linkedin_profile_url(c_name, comp_name, c_li)
-                    li_label = "🔗 Open LinkedIn (Apollo Reveal)" if (c_li and "linkedin.com" in c_li) else "🔗 Find on LinkedIn (Apollo Reveal)"
-                    st.markdown(
-                        f'<a href="{li_url}" target="_blank" style="display:block; text-align:center; padding:10px 14px; background:#0A66C2; color:white !important; font-family:\'Plus Jakarta Sans\', sans-serif; font-weight:700; font-size:0.9rem; border-radius:8px; text-decoration:none; margin-bottom:4px; box-shadow: 0 2px 8px rgba(10,102,194,0.3);">{li_label}</a>',
-                        unsafe_allow_html=True,
-                    )
-                    st.caption("💡 *Open on LinkedIn. Free Apollo Chrome Extension pops up to reveal direct phone.*")
+                    # LinkedIn Research & Apollo Phone Reveal
+                    render_linkedin_research_and_reveal_ui(lead, key_prefix=f"cc_{lead_id}")
 
                     # Quick Phone & LinkedIn Profile Editor
                     with st.expander("✏️ Update Phone / LinkedIn Profile", expanded=(not c_phone)):
@@ -1512,13 +1548,7 @@ elif st.session_state["active_tab"] == "Pipeline":
                     if p_phone:
                         st.markdown(f"**Direct Phone:** `{p_phone}`")
 
-                    p_li = lead.get("contact_linkedin") or ""
-                    p_li_url = get_linkedin_profile_url(lead.get("contact_name") or "", lead.get("company_name") or "", p_li)
-                    p_li_label = "🔗 LinkedIn Profile (Apollo Reveal)" if (p_li and "linkedin.com" in p_li) else "🔗 Find on LinkedIn (Apollo Reveal)"
-                    st.markdown(
-                        f'<a href="{p_li_url}" target="_blank" style="display:inline-block; padding:5px 11px; background:#0A66C2; color:white !important; font-size:0.78rem; font-weight:700; border-radius:5px; text-decoration:none; margin-top:3px; margin-bottom:6px;">{p_li_label}</a>',
-                        unsafe_allow_html=True
-                    )
+                    render_linkedin_research_and_reveal_ui(lead, key_prefix=f"pipe_{lead['id']}")
 
                     render_hunter_decision_makers_ui(lead, key_prefix="pipe")
                     st.markdown(f"**Category:** `{cat_label}`")
@@ -1683,13 +1713,7 @@ elif st.session_state["active_tab"] == "Contacts":
                     if c_phone:
                         st.markdown(f"**Direct Phone:** `{c_phone}`")
 
-                    c_li = lead.get("contact_linkedin") or ""
-                    c_li_url = get_linkedin_profile_url(lead.get("contact_name") or "", lead.get("company_name") or "", c_li)
-                    c_li_label = "🔗 LinkedIn Profile (Apollo Reveal)" if (c_li and "linkedin.com" in c_li) else "🔗 Find on LinkedIn (Apollo Reveal)"
-                    st.markdown(
-                        f'<a href="{c_li_url}" target="_blank" style="display:inline-block; padding:5px 11px; background:#0A66C2; color:white !important; font-size:0.78rem; font-weight:700; border-radius:5px; text-decoration:none; margin-top:3px; margin-bottom:6px;">{c_li_label}</a>',
-                        unsafe_allow_html=True
-                    )
+                    render_linkedin_research_and_reveal_ui(lead, key_prefix=f"cnt_{lead['id']}")
 
                     render_hunter_decision_makers_ui(lead, key_prefix="contacts")
                     if lead.get("reason"):
