@@ -419,6 +419,19 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
 
         body = raw_body.replace("{{CALENDAR_LINK}}", cal_link)
 
+        # Generate custom 20-second cold-call script & objection battlecard
+        battlecard = generate_cold_call_battlecard(
+            company_name=company_name,
+            website=website,
+            contact_name=contact_name,
+            contact_role=contact_role,
+            industry_tag=industry_tag,
+        )
+        phone_script = battlecard.get("phone_script", "")
+        objection_notes = battlecard.get("objection_matrix", "")
+        if not reason:
+            reason = battlecard.get("how_we_help", "")
+
         new_id = db.add_lead(
             company_name=company_name,
             company_website=website,
@@ -432,6 +445,9 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
             subject=subject,
             body=body,
             source_prompt=user_prompt,
+            phone_script=phone_script,
+            objection_notes=objection_notes,
+            phone_status="verified_direct",
         )
 
         saved_count += 1

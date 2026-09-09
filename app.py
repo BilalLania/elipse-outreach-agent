@@ -1073,12 +1073,31 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
     st.markdown('<div class="hero-heading">Cold Call Battlecard Deck</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">300 daily pre-scrubbed leads with verified direct lines, live on-screen 20-second scripts, and objection rebuttals.</div>', unsafe_allow_html=True)
 
-    # Ingestion Expander: Apollo API & CSV Importer
-    with st.expander("📥 **Ingest Daily 300-Lead Batch (Apollo.io API or Bulk CSV Drag-and-Drop)**", expanded=False):
-        tab_apollo, tab_csv = st.tabs(["🚀 Apollo.io Direct API", "📁 Bulk CSV Drag-and-Drop"])
+    # Ingestion Expander: Free AI Discovery, CSV Importer & Apollo API
+    with st.expander("📥 **Ingest Daily 300-Lead Batch (Free AI Discovery, CSV Import, or Apollo API)**", expanded=False):
+        tab_ai_free, tab_csv, tab_apollo = st.tabs(["🤖 Free AI Web Discovery (No API Key)", "📁 Bulk CSV Drag-and-Drop (Free)", "🚀 Apollo.io Direct API (Paid Plans)"])
+
+        with tab_ai_free:
+            st.markdown("Use Gemini Flash live web search + Hunter.io enrichment to discover real commercial businesses, look up decision makers, and generate custom 20-second phone scripts — **100% Free, no Apollo API key required**.")
+            free_prompt = st.text_input(
+                "Target ICP & Industry Query",
+                value="US companies that are B Tier companies doing around 1M to 10M in profits and would be interested in Interactive 3D Configurators",
+                key="free_icp_search_query",
+            )
+            if st.button("🚀 Discover & Generate Calling Battlecards (Free)", key="btn_free_ai_discover", type="primary"):
+                with st.spinner("AI is searching Google, verifying official websites, and generating custom cold-call battlecards..."):
+                    res = agent_core.run_agent(free_prompt.strip(), log=lambda m: None)
+                if res.get("saved", 0) > 0:
+                    st.success(f"🎉 Generated and added {res['saved']} qualified call-ready leads with scripts to your Cold Call Desk!")
+                    st.rerun()
+                elif res.get("error"):
+                    st.error(f"⚠️ {res['error']}")
+                else:
+                    st.info("Found no new companies (or all discovered were already in your database). Try specifying a different niche or state!")
 
         with tab_apollo:
             st.markdown("Query Apollo.io's B2B database directly for verified decision-maker emails, mobile phone numbers, and LinkedIn URLs.")
+            st.info("ℹ️ **Apollo Plan Notice:** Apollo.io blocks direct REST API access on their Free plan (requires Basic $49/mo). If you are on Apollo's free plan, simply do your search on the Apollo.io website, click **'Export to CSV'**, and drop it into the **'Bulk CSV Drag-and-Drop'** tab for free!")
             ap_c1, ap_c2 = st.columns([3, 1.2])
             with ap_c1:
                 icp_query = st.text_input(
@@ -1095,7 +1114,7 @@ elif st.session_state["active_tab"] == "Cold Call Desk":
                 type="password",
                 placeholder="Paste Apollo API key...",
                 key="apollo_api_key_input",
-                help="Get your key from Apollo.io -> Settings -> API Keys",
+                help="Get your key from Apollo.io -> Settings -> API Keys (Requires paid Apollo plan)",
             )
 
             if st.button("🚀 Fetch & Enrich Batch from Apollo", key="btn_fetch_apollo", type="primary"):

@@ -86,6 +86,12 @@ def query_apollo_leads(icp_prompt: str, limit: int = 50, api_key: str = None) ->
 
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=15)
+        if r.status_code == 403:
+            return {
+                "success": False,
+                "error": "Apollo Free Plan Notice: Apollo.io reserves their direct REST Search API for paid plans ($49/mo). Free options: 1) Use the 'Free AI Discovery' tab to generate leads via Gemini + Hunter.io, OR 2) Do your search on the free Apollo website, click 'Export CSV', and drop it into the 'Bulk CSV' tab!",
+                "leads": [],
+            }
         if r.status_code != 200:
             return {
                 "success": False,
