@@ -74,7 +74,7 @@ db.init_db()
 # Theme Management (Light / Dark)
 # ---------------------------------------------------------------------------
 if "theme" not in st.session_state:
-    st.session_state["theme"] = "light"
+    st.session_state["theme"] = "dark"
 
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "Today"
@@ -96,17 +96,18 @@ if is_dark:
     METRIC_BORDER = "#262B36"
     BADGE_COLOR = "#EF4444"
 else:
-    BG_COLOR = "#F8FAFC"
-    CARD_BG = "#FFFFFF"
-    CARD_BORDER = "#E2E8F0"
-    TEXT_COLOR = "#0F172A"
-    TEXT_MUTED = "#64748B"
+    # Editorial Warm Light Beige (Soft Sand Linen / Non-white)
+    BG_COLOR = "#F4EFE6"
+    CARD_BG = "#FAF6EE"
+    CARD_BORDER = "#E2D9CC"
+    TEXT_COLOR = "#1C1917"
+    TEXT_MUTED = "#78716C"
     ACCENT_COLOR = "#A84B2C"
-    ACCENT_HOVER = "#B85736"
-    TAG_BG = "#F1F5F9"
-    INPUT_BG = "#FFFFFF"
-    SIDEBAR_BG = "#F1F5F9"
-    METRIC_BORDER = "#E2E8F0"
+    ACCENT_HOVER = "#8F3E23"
+    TAG_BG = "#EAE2D5"
+    INPUT_BG = "#FAF6EE"
+    SIDEBAR_BG = "#EBE3D6"
+    METRIC_BORDER = "#E2D9CC"
     BADGE_COLOR = "#C94528"
 
 # ---------------------------------------------------------------------------
@@ -520,7 +521,7 @@ with st.sidebar:
     st.markdown('<div class="date-eyebrow">PREFERENCES</div>', unsafe_allow_html=True)
     col_t1, col_t2 = st.columns(2)
     with col_t1:
-        if st.button("☀️ Light", type="primary" if not is_dark else "secondary", use_container_width=True):
+        if st.button("🌾 Light Beige", type="primary" if not is_dark else "secondary", use_container_width=True):
             st.session_state["theme"] = "light"
             st.rerun()
     with col_t2:
