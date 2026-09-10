@@ -17,6 +17,7 @@ import re
 import time
 import urllib.parse
 from urllib.parse import urlparse
+from datetime import datetime
 from dotenv import load_dotenv
 import requests
 
@@ -31,9 +32,53 @@ except ImportError:
 from google import genai
 from google.genai import types
 
+# Silence noisy google-genai INFO/WARNING lines (the spurious "AFC not recommended"
+# notice and the "Both GOOGLE_API_KEY and GEMINI_API_KEY are set" notice). Real errors
+# still surface.
+import logging as _logging
+for _n in ("google_genai", "google.genai", "google_genai.models", "google_genai._api_client"):
+    _logging.getLogger(_n).setLevel(_logging.ERROR)
+
 import db
 
 load_dotenv()
+
+# The SDK complains on every client init when both env vars are set. Keep GEMINI_API_KEY
+# (from .env) as the single source of truth so calls are deterministic.
+if os.environ.get("GEMINI_API_KEY") and os.environ.get("GOOGLE_API_KEY"):
+    os.environ.pop("GOOGLE_API_KEY", None)
+elif os.environ.get("GOOGLE_API_KEY") and not os.environ.get("GEMINI_API_KEY"):
+    os.environ["GEMINI_API_KEY"] = os.environ["GOOGLE_API_KEY"]
+    os.environ.pop("GOOGLE_API_KEY", None)
+
+
+def _secrets_file_exists():
+    import pathlib
+    for p in (
+        pathlib.Path.home() / ".streamlit" / "secrets.toml",
+        pathlib.Path(".streamlit") / "secrets.toml",
+    ):
+        try:
+            if p.exists():
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _secret(name):
+    """Env var first (ignoring empty strings); st.secrets only if a secrets.toml exists."""
+    val = os.environ.get(name)
+    if val:
+        return val
+    if _secrets_file_exists():
+        try:
+            import streamlit as st
+            return st.secrets.get(name)
+        except Exception:
+            return None
+    return None
+
 
 # Multi-Model Fallback Cascade to prevent 503 / 429 outages
 MODEL_CASCADE = [
@@ -98,38 +143,272 @@ Return a valid JSON array of objects:
 
 
 def get_calendar_link():
-    link = os.environ.get("CALENDAR_LINK")
-    if not link:
-        try:
-            import streamlit as st
-            link = st.secrets.get("CALENDAR_LINK")
-        except Exception:
-            pass
-    return link or DEFAULT_CALENDAR_LINK
+    return _secret("CALENDAR_LINK") or DEFAULT_CALENDAR_LINK
 
 
 def get_gemini_client():
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        try:
-            import streamlit as st
-            api_key = st.secrets.get("GEMINI_API_KEY")
-        except Exception:
-            pass
+    api_key = _secret("GEMINI_API_KEY") or _secret("GOOGLE_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY is not set. Please add it to your .env file or Streamlit Cloud Secrets.")
     return genai.Client(api_key=api_key)
 
 
 def get_hunter_key():
-    key = os.environ.get("HUNTER_API_KEY")
-    if not key:
-        try:
-            import streamlit as st
-            key = st.secrets.get("HUNTER_API_KEY")
-        except Exception:
-            pass
-    return key
+    return _secret("HUNTER_API_KEY")
+
+
+def get_signalhire_key():
+    return _secret("SIGNALHIRE_API_KEY")
+
+
+SIGNALHIRE_BASE = "https://www.signalhire.com/api/v1/candidate"
+
+_SR_KEYWORDS = ("owner", "founder", "ceo", "chief executive", "president", "partner",
+                "principal", "managing director", "director", "vp ", "vice president",
+                "head of", "gm", "general manager")
+_NON_PERSONAL = ("team", "division", "department", "sales", "design", "build", "custom",
+                 "group", "desk", "decision maker", "n/a", "unknown", "")
+
+
+def signalhire_search(name: str = "", company: str = "", title: str = "") -> list:
+    """
+    Synchronous SignalHire profile search (POST /candidate/searchByQuery).
+    No credits, no callback URL. Returns a list of profile dicts (name, current
+    title/company, location, uid) but NO email/phone — contact reveal is a
+    separate credit-metered async call that needs a public callback URL.
+    """
+    key = get_signalhire_key()
+    if not key or not (name or company):
+        return []
+
+    body = {}
+    if name and name.strip().lower() not in _NON_PERSONAL:
+        body["fullName"] = name.strip()
+    if company:
+        body["currentCompany"] = company.strip()
+    if title:
+        body["currentTitle"] = title.strip()
+    if not body:
+        return []
+
+    try:
+        r = requests.post(
+            f"{SIGNALHIRE_BASE}/searchByQuery",
+            json=body,
+            headers={"apikey": key, "Content-Type": "application/json"},
+            timeout=15,
+        )
+        if r.status_code != 200 or not r.content:
+            return []
+        return _signalhire_extract_candidates(r.json())
+    except Exception:
+        return []
+
+
+_COMPANY_STOPWORDS = {
+    "the", "and", "inc", "llc", "ltd", "co", "corp", "company", "group", "holdings",
+    "golf", "carts", "cart", "cars", "car", "custom", "customs", "vehicles", "vehicle",
+    "motors", "auto", "autos", "automotive", "furniture", "interiors", "design", "designs",
+    "studio", "studios", "solutions", "services", "products", "usa", "international",
+    "global", "enterprises", "industries", "specialty", "specialties", "of", "for",
+}
+
+
+def _distinctive_tokens(company: str):
+    return [
+        t for t in re.split(r"[^a-z0-9]+", (company or "").lower())
+        if len(t) > 2 and t not in _COMPANY_STOPWORDS
+    ]
+
+
+def _company_match(profile: dict, company: str) -> bool:
+    tokens = _distinctive_tokens(company)
+    if not tokens:
+        return False
+    exp = profile.get("experience") or []
+    hay = " ".join((e.get("company") or "") for e in exp if isinstance(e, dict)).lower()
+    return any(t in hay for t in tokens)
+
+
+# Words that should appear on a site genuinely belonging to each category.
+INDUSTRY_KEYWORDS = {
+    "⛳ Custom Golf Carts": ["golf cart", "golf car", "ez-go", "ezgo", "club car", "yamaha", "buggy", "lsv", "street legal"],
+    "🏎️ Custom Automotive & Mobility": ["vehicle", "automotive", "truck", "motor", "restomod", "4x4", "chassis", "ev ", "car "],
+    "🛋️ Luxury Furniture & Interiors": ["kitchen", "furniture", "interior", "cabinet", "joinery", "worktop", "wardrobe", "bespoke", "cabinetry", "showroom"],
+    "🏗️ Real Estate & Megaprojects": ["real estate", "property", "development", "villa", "residence", "masterplan", "architect", "apartment"],
+    "⛵ Superyachts & Marine": ["yacht", "marine", "boat", "vessel", "tender", "shipyard"],
+}
+
+
+def site_matches_lead(company_name: str, industry_tag: str, scraped_text: str, blocked: bool = False):
+    """
+    Cheap sanity check that a scraped page actually belongs to the lead.
+
+    Catches hallucinated leads where the model invented a company and attached an
+    unrelated live domain (e.g. "Papilio Bespoke Kitchens" -> papilio.uk, a book site).
+
+    Crucially it must NOT accuse a real lead just because the site blocked the scanner
+    (403 / Cloudflare / captcha) — that tells us nothing about the company.
+
+    Returns (verdict, detail):
+      "match"    page mentions the company's distinctive name or its industry
+      "mismatch" page has real text but relates to neither -> almost certainly wrong site
+      "blocked"  the site refused the scanner, so nothing could be verified
+      "unknown"  too little text scraped to judge
+    """
+    text = " ".join((scraped_text or "").lower().split())
+
+    # A refusal page proves nothing about the lead — check this BEFORE mismatch.
+    try:
+        import scraper as _scraper
+        _blocked_text = _scraper.looks_blocked(text)
+    except Exception:
+        _blocked_text = False
+    if blocked or _blocked_text:
+        return "blocked", "the site refused the scanner (bot protection), so nothing could be read"
+
+    if len(text) < 25:
+        return "unknown", "not enough page text to verify"
+
+    for t in _distinctive_tokens(company_name):
+        if t in text:
+            return "match", f"page mentions “{t}”"
+
+    for kw in INDUSTRY_KEYWORDS.get(industry_tag or "", []):
+        if kw in text:
+            return "match", f"page mentions “{kw.strip()}”"
+
+    return "mismatch", "page content relates to neither the company name nor its industry"
+
+
+def enrich_lead(lead: dict) -> dict:
+    """
+    Conservative identity check via SignalHire's synchronous searchByQuery, layered on
+    top of Hunter.io. It ONLY acts when the lead already has a real contact name AND a
+    SignalHire profile for that name distinctly matches the company — in that case it
+    fills in the person's real current title / captures their SignalHire uid.
+
+    It deliberately does NOT run for placeholder contacts ("Custom Sales Team") — the
+    company-only search is too noisy. Email / phone are never available here (SignalHire
+    reveals those only via a credit-metered async callback flow the app can't host).
+    Merge is strictly additive; nothing good is overwritten. Never raises.
+    """
+    if not isinstance(lead, dict):
+        return lead
+    if not get_signalhire_key():
+        return lead
+
+    company = (lead.get("company_name") or "").strip()
+    name = (lead.get("contact_name") or "").strip()
+    if not name or name.lower() in _NON_PERSONAL or not company:
+        return lead
+    if not _distinctive_tokens(company):
+        return lead  # company name too generic to confirm a match
+
+    try:
+        profiles = signalhire_search(name=name)
+        matches = [p for p in profiles if _company_match(p, company)]
+        if not matches:
+            return lead  # no confident person<->company match; leave lead untouched
+
+        def seniority(p):
+            exp = p.get("experience") or []
+            t0 = (exp[0].get("title") or exp[0].get("position") or "").lower() if exp else ""
+            return 1 if any(k in t0 for k in _SR_KEYWORDS) else 0
+
+        best = sorted(matches, key=seniority, reverse=True)[0]
+        found = _signalhire_pick_contacts(best)
+
+        if found.get("position") and not (lead.get("contact_role") or "").strip():
+            lead["contact_role"] = found["position"]
+        if best.get("uid"):
+            lead["signalhire_uid"] = best["uid"]  # for a later credit-metered reveal
+
+        prev_src = (lead.get("enrichment_source") or "").strip()
+        lead["enrichment_source"] = (
+            "hunter+signalhire" if "hunter" in prev_src
+            else (prev_src + "+signalhire" if prev_src else "signalhire")
+        )
+        lead["enriched_at"] = datetime.now().isoformat(timespec="seconds")
+    except Exception:
+        return lead
+
+    return lead
+
+
+def _signalhire_extract_candidates(data) -> list:
+    """Normalizes the several shapes SignalHire may return into a list of candidate dicts."""
+    if isinstance(data, list):
+        return [d for d in data if isinstance(d, dict)]
+    if not isinstance(data, dict):
+        return []
+    for key in ("candidates", "results", "profiles", "data", "items"):
+        val = data.get(key)
+        if isinstance(val, list) and val:
+            out = []
+            for entry in val:
+                if isinstance(entry, dict):
+                    out.append(entry.get("candidate") if isinstance(entry.get("candidate"), dict) else entry)
+            if out:
+                return out
+    if data.get("candidate") and isinstance(data["candidate"], dict):
+        return [data["candidate"]]
+    return []
+
+
+def _signalhire_pick_contacts(candidate: dict) -> dict:
+    """Pulls the first email / phone / LinkedIn + headline from a SignalHire candidate."""
+    result = {"email": "", "phone": "", "linkedin": "", "name": "", "position": ""}
+    if not isinstance(candidate, dict):
+        return result
+
+    full_name = candidate.get("fullName") or candidate.get("full_name") or ""
+    if not full_name:
+        fn = candidate.get("firstName") or candidate.get("first_name") or ""
+        ln = candidate.get("lastName") or candidate.get("last_name") or ""
+        full_name = f"{fn} {ln}".strip()
+    result["name"] = full_name
+
+    exp = candidate.get("experience") or candidate.get("positions") or []
+    if isinstance(exp, list) and exp and isinstance(exp[0], dict):
+        result["position"] = exp[0].get("position") or exp[0].get("title") or ""
+    result["position"] = result["position"] or candidate.get("headline") or candidate.get("title") or ""
+
+    contacts = candidate.get("contacts") or candidate.get("contactInfo") or []
+    if isinstance(contacts, dict):
+        contacts = [contacts]
+    for c in contacts if isinstance(contacts, list) else []:
+        if not isinstance(c, dict):
+            continue
+        ctype = str(c.get("type") or "").lower()
+        value = c.get("value") or c.get("email") or c.get("phone") or ""
+        if not value:
+            continue
+        if ("email" in ctype or "@" in str(value)) and not result["email"]:
+            result["email"] = str(value)
+        elif ("phone" in ctype or ctype in ("mobile", "work", "tel")) and not result["phone"]:
+            result["phone"] = str(value)
+
+    if not result["email"]:
+        emails = candidate.get("emails") or []
+        if isinstance(emails, list) and emails:
+            first = emails[0]
+            result["email"] = first.get("email") if isinstance(first, dict) else str(first)
+    if not result["phone"]:
+        phones = candidate.get("phones") or candidate.get("phoneNumbers") or []
+        if isinstance(phones, list) and phones:
+            first = phones[0]
+            result["phone"] = first.get("phone") if isinstance(first, dict) else str(first)
+
+    social = candidate.get("social") or candidate.get("socialLinks") or candidate.get("social_links") or []
+    if isinstance(social, list):
+        for s in social:
+            link = s.get("link") or s.get("url") if isinstance(s, dict) else str(s)
+            if link and "linkedin.com" in link:
+                result["linkedin"] = link
+                break
+
+    return result
 
 
 def verify_and_resolve_official_website(company_name: str, suggested_url: str) -> str:
@@ -428,11 +707,14 @@ def map_to_standard_category(tag, company_name=""):
     return "⚡ Tech & Commercial Products"
 
 
-def run_agent(user_prompt: str, log=None) -> dict:
+def run_agent(user_prompt: str, log=None, max_leads: int = 5) -> dict:
     """
     Executes multi-model fallback cascade intelligence to research companies,
     verify live official websites, lookup contacts, and draft custom outreach emails.
+
+    max_leads: how many businesses to ask the model for (clamped to 1..25).
     """
+    max_leads = max(1, min(int(max_leads or 5), 25))
     client = get_gemini_client()
     saved_count = 0
     skipped_duplicates = []
@@ -442,7 +724,7 @@ def run_agent(user_prompt: str, log=None) -> dict:
     prompt_content = f"""Target Outreach Request from Bilal:
 "{user_prompt}"
 
-Identify 3 to 5 real commercial businesses/brands/exhibitors matching this request that would benefit significantly from Elipse Studio's 3D Configurators, CGI Animation, or Digital Twins. Provide complete company profiles and write a personalized email draft for each."""
+Identify {max_leads} real commercial businesses/brands/exhibitors matching this request that would benefit significantly from Elipse Studio's 3D Configurators, CGI Animation, or Digital Twins. Provide complete company profiles and write a personalized email draft for each."""
 
     candidates = None
     last_error = None
@@ -469,6 +751,8 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
 
     if not candidates or not isinstance(candidates, list):
         return {"saved": 0, "skipped_duplicates": [], "leads": [], "error": last_error or "No companies found"}
+
+    candidates = candidates[:max_leads]
 
     for c in candidates:
         if not isinstance(c, dict):
@@ -510,6 +794,28 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
             if hunter_info.get("linkedin_url"):
                 contact_linkedin = hunter_info["linkedin_url"]
 
+        # Parallel/complementary enrichment via SignalHire (layered on top of Hunter.io)
+        contact_phone = ""
+        enrichment_source = "hunter" if domain else ""
+        enriched_at = ""
+        _lead_tmp = {
+            "company_name": company_name,
+            "contact_name": contact_name,
+            "contact_role": contact_role,
+            "contact_email": contact_email,
+            "contact_phone": contact_phone,
+            "contact_linkedin": contact_linkedin,
+            "enrichment_source": enrichment_source,
+        }
+        _lead_tmp = enrich_lead(_lead_tmp)
+        contact_name = _lead_tmp.get("contact_name") or contact_name
+        contact_role = _lead_tmp.get("contact_role") or contact_role
+        contact_email = _lead_tmp.get("contact_email") or contact_email
+        contact_phone = _lead_tmp.get("contact_phone") or ""
+        contact_linkedin = _lead_tmp.get("contact_linkedin") or contact_linkedin
+        enrichment_source = _lead_tmp.get("enrichment_source") or enrichment_source
+        enriched_at = _lead_tmp.get("enriched_at") or ""
+
         # Fallback email if still missing
         if not contact_email or contact_email == "unknown":
             if domain:
@@ -536,6 +842,7 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
             contact_name=contact_name,
             contact_role=contact_role,
             contact_email=contact_email,
+            contact_phone=contact_phone,
             contact_linkedin=contact_linkedin,
             industry_tag=industry_tag,
             deal_value=deal_val,
@@ -547,6 +854,8 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
             phone_script=phone_script,
             objection_notes=objection_notes,
             phone_status="verified_direct",
+            enrichment_source=enrichment_source,
+            enriched_at=enriched_at,
         )
 
         saved_count += 1
@@ -557,6 +866,7 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
             "contact_name": contact_name,
             "contact_role": contact_role,
             "contact_email": contact_email,
+            "contact_phone": contact_phone,
             "contact_linkedin": contact_linkedin,
             "industry_tag": industry_tag,
             "deal_value": deal_val,
@@ -564,6 +874,7 @@ Identify 3 to 5 real commercial businesses/brands/exhibitors matching this reque
             "reason": reason,
             "subject": subject,
             "body": body,
+            "enrichment_source": enrichment_source,
         })
 
     return {
@@ -584,7 +895,9 @@ def generate_cold_call_battlecard(
     Generates tailored 3D configurator sales angle, 20-second cold-call phone opener,
     and 3 custom objection rebuttals for an outbound sales rep.
     """
-    first_name = contact_name.split()[0] if contact_name and contact_name != "Decision Maker" else "there"
+    _cn = (contact_name or "").strip()
+    _non_personal = any(w in _cn.lower() for w in ["team", "division", "department", "sales", "design", "build", "custom", "group", "desk", "n/a", "unknown"])
+    first_name = _cn.split()[0] if (_cn and _cn != "Decision Maker" and not _non_personal) else "there"
     fallback_script = (
         f"Hi {first_name}, Bilal with Elipse Studio. I was checking out {company_name}'s collection online, "
         f"and noticed your buyers currently browse static photos before asking for a quote. "

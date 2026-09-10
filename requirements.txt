@@ -4,3 +4,4 @@ ddgs>=9.0.0
 duckduckgo-search>=7.0.0
 streamlit>=1.35.0
 requests>=2.31.0
+playwright>=1.47.0

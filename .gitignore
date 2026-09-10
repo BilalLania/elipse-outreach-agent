@@ -7,6 +7,10 @@ GEMINI_API_KEY.txt
 # Local SQLite Database
 leads.db
 
+# Playwright scraper output (ephemeral)
+screenshots/
+product.png
+
 # Python cache & virtual environment
 __pycache__/
 *.py[cod]
